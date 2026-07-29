@@ -1,63 +1,46 @@
 # Daily Instagram Carousel Contract
 
-Create one English Instagram carousel draft for the 8:00 AM
-America/Vancouver slot. Present it in this Codex task and stop for approval.
-Never publish automatically.
+Create one English Instagram carousel for the 8:00 AM America/Vancouver slot.
+Use two approvals: content approval before any art exists, then final approval
+before publication. Never publish automatically.
 
 ## Before drafting
 
-1. Read `social/projects.json` and `social/history.jsonl`.
+1. Read `social/projects.json` and recent `rendered` and publication events in
+   `social/history.jsonl`.
 2. Stop and report any latest `cleanup_failed` or `publishing` event. Do not
    draft while publication state is unresolved.
-3. Select the active project whose latest `published` event is oldest. If no
-   project has been published, use config order: Say Better, then Fina.
-4. Exclude every format with a `published` event in the previous 14 days.
-5. If no format remains eligible, stop and ask to expand the format library.
+3. Select the active project whose latest `published` event is oldest. If none
+   has been published, use config order: Say Better, then Fina.
+4. Exclude formats published in the previous 14 days. If none remains, stop
+   and ask to expand the format library.
+5. Select a configured audience problem, a non-similar hook, a format that
+   explains it naturally, and 4–10 slides including hook and CTA. Reject an
+   idea substantially similar to a recent post even if its format differs.
 
-## Choose the story
+Available structures: `ways-checklist`, `mistake-fix`, `signs-red-flags`,
+`before-after`, `myth-reality`, `mini-story`, `quiz-reveal`,
+`what-happens-next`, `do-this-not-that`, `a-vs-b`, `script-formula`,
+`ranked-options`, `three-levels`, `contrarian-breakdown`, `mini-case-study`,
+and `short-action-plan`.
 
-Choose one configured audience problem and the format that explains it most
-naturally. Slide count follows the story and must be 4–10 including hook and
-CTA.
+## Draft content only
 
-Available structures:
+- English only. Make the hook specific, credible, and understandable without
+  the caption. Keep every non-CTA slide useful without mentioning the app;
+  mention it only on the CTA.
+- The CTA contains the configured logo, app name, one positioning sentence,
+  and the official App Store badge—never an app screenshot.
+- The caption accurately summarizes the slides, includes `link in bio`, and
+  contains the project's exact App Store URL.
+- Write a meaningful plan for every slide. For Fina, do not promise outcomes
+  or present education as personalized financial, investment, tax, legal, or
+  credit advice.
 
-- `ways-checklist`: hook, one useful action per slide, CTA.
-- `mistake-fix`: familiar mistake, consequence, better alternative, CTA.
-- `signs-red-flags`: hook, one recognizable sign per slide, CTA.
-- `before-after`: situation, old approach, improved approach, reason, CTA.
-- `myth-reality`: claim/correction pairs, takeaway, CTA.
-- `mini-story`: person, problem, consequence, insight, CTA.
-- `quiz-reveal`: choice, reveal, explanation, CTA.
-- `what-happens-next`: a forward-looking sequence, especially useful for Fina.
-- `do-this-not-that`: paired behaviors and concise reasons.
-- `a-vs-b`: two approaches compared against one concrete goal.
-- `script-formula`: reusable wording or decision framework with examples.
-- `ranked-options`: transparent ranking with one criterion per slide.
-- `three-levels`: basic, better, and strongest responses to one problem.
-- `contrarian-breakdown`: defensible counterpoint, evidence, limit, takeaway.
-- `mini-case-study`: clearly labeled hypothetical situation, decision, result.
-- `short-action-plan`: a small sequence readers can follow over several days.
-
-Reject the idea and choose again when its hook, promise, or central example is
-substantially similar to a recently published post, even if the format differs.
-
-## Write the carousel
-
-- English only.
-- Make the hook specific, credible, and understandable without the caption.
-- Every non-CTA slide must be useful without mentioning the app.
-- Mention the app only on the final CTA slide.
-- Keep each slide focused on one idea and readable on a phone.
-- The final slide uses the configured app logo, app name, one positioning
-  sentence, and the official App Store badge. It contains no app screenshot.
-- Caption must accurately summarize the slides, contain `link in bio`, and
-  include the project's exact App Store URL.
-- Write meaningful alt text for every slide.
-- For Fina, never promise guaranteed outcomes or present education as
-  personalized financial, investment, tax, legal, or credit advice.
-
-Save this contract as `.social-work/{draft_id}/draft.json`:
+Save `.social-work/{draft_id}/draft.json`, using the local date, project ID,
+and a two-digit revision (`-02`, then `-03`) for `draft_id`. At this stage,
+each slide has only `kind`, `headline`, and `body`; omit `illustration`,
+`alt_text`, `scene`, and `text_layout`, and omit top-level `art_direction`.
 
 ```json
 {
@@ -67,107 +50,94 @@ Save this contract as `.social-work/{draft_id}/draft.json`:
   "hook": "Your balance looks fine. Next Tuesday might not.",
   "caption": "A balance is a snapshot. Find Fina through the link in bio or on the App Store: https://apps.apple.com/us/app/fina-financial-companion/id6778169653",
   "slides": [
-    {
-      "kind": "hook",
-      "headline": "Your balance looks fine.",
-      "body": "Next Tuesday might not.",
-      "illustration": "art-01.png",
-      "alt_text": "A person looking ahead at approaching bills."
-    },
-    {
-      "kind": "content",
-      "headline": "Today",
-      "body": "Some of that balance is already spoken for.",
-      "illustration": "art-02.png",
-      "alt_text": "Envelopes beside a current balance."
-    },
-    {
-      "kind": "content",
-      "headline": "Next Tuesday",
-      "body": "Two automatic payments arrive together.",
-      "illustration": "art-03.png",
-      "alt_text": "Two bills landing on one calendar day."
-    },
-    {
-      "kind": "cta",
-      "headline": "See it coming with Fina.",
-      "body": "Forecast upcoming pressure before it becomes a problem.",
-      "alt_text": "Fina logo and a Download on the App Store badge."
-    }
+    {"kind": "hook", "headline": "Your balance looks fine.", "body": "Next Tuesday might not."},
+    {"kind": "content", "headline": "Today", "body": "Some of that balance is already spoken for."},
+    {"kind": "content", "headline": "Next Tuesday", "body": "Two automatic payments arrive together."},
+    {"kind": "cta", "headline": "See it coming with Fina.", "body": "Forecast upcoming pressure before it becomes a problem."}
   ]
 }
 ```
 
-Use local date plus project ID and a two-digit revision number for `draft_id`.
-A revision gets `-02`, then `-03`.
+Run:
+
+```bash
+.venv/bin/python social/render.py record-content .social-work/<draft-id>/draft.json
+```
+
+## Present content and wait
+
+Send to this Codex task: project, topic, format, draft ID, total slide count,
+every `Slide N` headline and body (from `Slide 1` through the CTA), and
+`Caption`. Then stop. The exact phrase
+`콘텐츠 승인` is the only permission to continue. Do not generate images before content approval.
 
 ## Generate illustrations
 
-Use the built-in Codex image model, not an image API or SDK.
+After exact `콘텐츠 승인`, run:
 
-Generate one text-free editorial illustration per non-CTA slide:
+```bash
+.venv/bin/python social/render.py approve-content .social-work/<draft-id>/draft.json
+```
 
-- One coherent art direction, palette, line weight, and character treatment
-  across the carousel.
-- Warm editorial illustration with subtle texture and clear subjects.
-- Leave visual breathing room; the renderer places copy separately.
-- No text, letters, numbers, logos, app UI, phone UI, bank screens, financial
-  account data, watermark, or identifiable Apple device.
-- Do not imply that fictional amounts or accounts belong to a real person.
+Create a fresh art direction for this carousel and a different,
+content-specific scene plan for each non-CTA slide. Read recent `rendered`
+history events and reject any substantially similar `art_direction` or scenes.
+Add top-level `art_direction`, and add `scene`, `illustration`, `alt_text`, and
+`text_layout` to every non-CTA slide.
 
-Save sources beside `draft.json` using the exact filenames in the draft.
+Use the built-in Codex image model, not an image API or SDK. Generate
+full-bleed, text-free art beside `draft.json` using each slide's exact
+illustration filename.
 
-## Render and inspect
+- Do not use fixed composition templates. One carousel shares art style,
+  palette, character treatment, and texture, but every slide gets its own
+  content-specific composition.
+- Dialogue bubbles must belong to a depicted speaker. Intentionally position
+  blank notes, signs, speech bubbles, and environmental text surfaces around
+  the matching `text_layout` box.
+- Reject generic startup-art decoration, fake lettering, malformed anatomy,
+  and meaningless props. Never include text, letters, numbers, logos, app UI,
+  phone UI, bank screens, financial account data, watermarks, or identifiable
+  Apple devices. Do not imply fictional amounts or accounts are real.
+
+## Render, inspect, and wait
 
 Run:
 
 ```bash
-.venv/bin/python social/render.py render \
-  .social-work/2026-07-30-fina-01/draft.json \
-  --output .social-work/2026-07-30-fina-01/rendered
+.venv/bin/python social/render.py render .social-work/<draft-id>/draft.json --output .social-work/<draft-id>/rendered
 ```
 
-Use the current draft ID, not the example ID. Inspect every rendered JPEG.
-Regenerate or rewrite before showing the draft if there is generated lettering,
-awkward cropping, unreadable copy, overflow, incorrect branding, or unsupported
-claims.
+Inspect every rendered JPEG. Regenerate or revise affected slides for generated
+lettering, awkward cropping, unreadable or overflowing copy, incorrect
+branding, unsupported claims, or art that conflicts with its text layout.
 
-## Present and wait
+Present the completed carousel in order, plus project, format, draft ID, total
+slides, Caption, and ordered alt text. Stop. Exact `승인` publishes; revision
+feedback changes only affected slides; copy changes return to a new content
+revision and require `콘텐츠 승인` again. Do not create R2 objects or Instagram
+containers before final approval.
 
-Send to this Codex task:
-
-1. Project, format, draft ID, and slide count.
-2. Every rendered image in order.
-3. Caption.
-4. Ordered alt text.
-5. A short request for `승인`, revision feedback, or `보류`.
-
-Do not create R2 objects or Instagram containers at this stage.
-
-## Handle the reply
+## Handle the final reply
 
 - Exact `승인`: publish the newest non-terminal draft with:
 
   ```bash
   uv run --env-file .env .venv/bin/python social/publish.py \
-    .social-work/2026-07-30-fina-01/draft.json \
-    .social-work/2026-07-30-fina-01/rendered
+    .social-work/<draft-id>/draft.json \
+    .social-work/<draft-id>/rendered
   ```
 
-  Use the current draft ID. Report the Instagram media ID and confirm the R2
-  prefix is empty.
-
-- Revision feedback: run
-  `.venv/bin/python social/publish.py --record-state revised
-  .social-work/{draft_id}/draft.json`, create the next revision ID, regenerate,
-  render, and present it again. Do not publish.
-- `보류`: run
-  `.venv/bin/python social/publish.py --record-state held
-  .social-work/{draft_id}/draft.json` and do not publish.
-- If multiple drafts await a decision, require the displayed draft ID with
+  Report the Instagram media ID and confirm the R2 prefix is empty.
+- Revision feedback: run `.venv/bin/python social/publish.py --record-state
+  revised .social-work/<draft-id>/draft.json`, update only the affected
+  rendered slides, and present it again. Copy changes create the next revision
+  ID and restart at content approval. Do not publish.
+- `보류`: run `.venv/bin/python social/publish.py --record-state held
+  .social-work/<draft-id>/draft.json` and do not publish.
+- If multiple drafts await a decision, require the displayed draft ID with the
   approval.
-- If publication reports `cleanup_failed`, run
-  `uv run --env-file .env .venv/bin/python social/publish.py
-  --cleanup-only {draft_id}` before any new draft.
-- If publication stops in `publishing`, do not retry. Report the container ID
-  and require manual Instagram reconciliation to avoid a duplicate post.
+- If publication reports `cleanup_failed`, run `uv run --env-file .env
+  .venv/bin/python social/publish.py --cleanup-only <draft-id>` before any new
+  draft. If it stops in `publishing`, do not retry: report the container ID and
+  require manual Instagram reconciliation to avoid a duplicate post.

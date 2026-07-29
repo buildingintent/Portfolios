@@ -1,8 +1,8 @@
 # Instagram Promotion Workflow
 
 This workflow creates one English carousel draft every day at 8:00 AM
-America/Vancouver, shows it in Codex for approval, and publishes only after
-`승인`.
+America/Vancouver, shows its content in Codex before image generation, then
+publishes only after final `승인`.
 
 It starts with Say Better and Fina, rotating by the least recent successful
 publication. Generated illustrations and unpublished drafts stay outside Git.
@@ -101,13 +101,29 @@ a shell script.
 
 The recurring Codex task follows `PROMPT.md`:
 
-1. Select the least-recently published active project and an eligible format.
-2. Write educational, problem-led content.
-3. Generate text-free editorial illustrations with the built-in image model.
-4. Render and inspect 1080×1350 JPEGs.
-5. Show slides, caption, and alt text in chat.
-6. Wait for `승인`.
-7. Publish once, then delete and verify the R2 prefix.
+```text
+content proposal
+→ 콘텐츠 승인
+→ scene planning and image generation
+→ completed carousel
+→ 승인
+→ R2 staging
+→ Instagram publish
+→ verified R2 cleanup
+```
+
+The content proposal directory must contain no generated image before
+`콘텐츠 승인`. Record and approve that content before adding art details:
+
+```bash
+.venv/bin/python social/render.py record-content .social-work/<draft-id>/draft.json
+.venv/bin/python social/render.py approve-content .social-work/<draft-id>/draft.json
+.venv/bin/python social/render.py render .social-work/<draft-id>/draft.json --output .social-work/<draft-id>/rendered
+```
+
+After content approval, plan distinct scenes and generate the text-free art,
+then render and inspect the carousel. Final `승인` publishes once, then deletes
+and verifies the R2 prefix.
 
 `publishing` is an intentionally blocked state. It means the publish request may
 have succeeded without a safely recorded media ID, so automatic retry could

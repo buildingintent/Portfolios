@@ -986,6 +986,24 @@ class PublishFlowTests(unittest.TestCase):
         self.r2 = FakeR2()
         self.instagram = FakeInstagram()
 
+    def test_prompt_requires_content_approval_before_image_generation(self):
+        prompt = (
+            Path(__file__).with_name("PROMPT.md")
+            .read_text(encoding="utf-8")
+        )
+        content_gate = prompt.index("콘텐츠 승인")
+        image_generation = prompt.index("## Generate illustrations")
+        final_gate = prompt.index("Exact `승인`")
+
+        self.assertLess(content_gate, image_generation)
+        self.assertLess(image_generation, final_gate)
+        self.assertIn(
+            "Do not generate images before content approval.",
+            prompt,
+        )
+        self.assertIn("Slide 1", prompt)
+        self.assertIn("Caption", prompt)
+
     def test_success_publishes_once_and_cleans_prefix(self):
         media_id = publish(
             self.draft,
