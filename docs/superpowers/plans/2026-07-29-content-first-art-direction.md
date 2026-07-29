@@ -331,10 +331,12 @@ Place these functions in `social/render.py`. Remove the duplicate
 `latest_event` definition from `social/publish.py` and import it from
 `social.render` beside `append_event`, `load_json`, and `read_events`.
 
-Change `approve` so only `rendered` may become `approved`, while repeated
-`approved` is idempotent. Restrict `assert_publishable` safe states to
-`{"approved", "publish_failed"}`. Keep the existing protections for
-`publishing`, `published`, `cleanup_failed`, and `cleanup_completed`.
+Change `approve` so `rendered` becomes `approved`; repeated `approved` and
+the retry state `publish_failed` are no-ops. Every other latest state raises
+`"rendered carousel required"`. Restrict `assert_publishable` safe states to
+`{"approved", "publish_failed"}` and call it in `publish` immediately after
+`approve`. Keep the existing protections for `publishing`, `published`,
+`cleanup_failed`, and `cleanup_completed`.
 
 Change `record_terminal` to accept `revised` or `held` only when the latest
 event is one of:
