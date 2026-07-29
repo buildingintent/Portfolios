@@ -661,7 +661,7 @@ IG_ACCESS_TOKEN
 META_API_VERSION
 ```
 
-Require `R2_BUCKET` to equal `portfolio-social-staging`. Reject missing/empty values before upload.
+Require `R2_BUCKET` to equal `building-intent-social`. Reject missing/empty values before upload.
 
 Implement `upload_images`, `presign_images`, and `cleanup_prefix`.
 
@@ -821,7 +821,7 @@ Document only these four sections:
    - Obtain the Instagram professional user ID and long-lived access token.
    - Record token expiry and renewal procedure.
 3. **Create private R2 staging**
-   - Create private bucket `portfolio-social-staging`.
+   - Create private bucket `building-intent-social`.
    - Disable public development URL and custom domains.
    - Create an object read/write token scoped only to that bucket.
    - Add a lifecycle rule deleting objects after one day.

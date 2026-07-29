@@ -223,7 +223,7 @@ Facebook Page and requests fewer unrelated permissions.
 
 ## R2 Setup and Cleanup
 
-Create a new private bucket named `portfolio-social-staging`. Do not reuse any
+Create a new private bucket named `building-intent-social`. Do not reuse any
 backup bucket.
 
 - Issue an R2 API token restricted to object read/write on this bucket.

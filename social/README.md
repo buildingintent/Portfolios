@@ -56,7 +56,7 @@ References:
 
 In Cloudflare:
 
-1. Create a new R2 bucket named `portfolio-social-staging`.
+1. Create a new R2 bucket named `building-intent-social`.
 2. Keep the public development URL and custom domains disabled.
 3. Create an R2 API token with object read/write access scoped only to this
    bucket.
@@ -87,7 +87,7 @@ The file must contain these keys:
 - `R2_SECRET_ACCESS_KEY`
 - `R2_BUCKET`
 
-`R2_BUCKET` must be `portfolio-social-staging`. Never place this file, an
+`R2_BUCKET` must be `building-intent-social`. Never place this file, an
 `.env`, tokens, or presigned URLs inside the repository. Never paste secret
 values into a Codex chat.
 

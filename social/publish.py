@@ -79,9 +79,9 @@ def load_required_env(environ: dict[str, str]) -> dict[str, str]:
             + ", ".join(missing)
         )
     values = {name: environ[name] for name in REQUIRED_ENV}
-    if values["R2_BUCKET"] != "portfolio-social-staging":
+    if values["R2_BUCKET"] != "building-intent-social":
         raise ValueError(
-            "R2_BUCKET must be portfolio-social-staging"
+            "R2_BUCKET must be building-intent-social"
         )
     if not re.fullmatch(r"v\d+\.\d+", values["META_API_VERSION"]):
         raise ValueError("META_API_VERSION must look like v23.0")

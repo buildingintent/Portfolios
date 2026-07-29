@@ -790,7 +790,7 @@ class PublishFlowTests(unittest.TestCase):
 
     def test_r2_uses_expiring_get_urls_and_cleans_every_page(self):
         client = FakeS3Client()
-        r2 = R2(client, "portfolio-social-staging")
+        r2 = R2(client, "building-intent-social")
 
         keys = r2.upload("d1", self.files)
         urls = r2.presign(keys)
@@ -887,7 +887,7 @@ class PublishFlowTests(unittest.TestCase):
             "IG_ACCESS_TOKEN.*R2_SECRET_ACCESS_KEY",
         ):
             load_required_env(
-                {"R2_BUCKET": "portfolio-social-staging"}
+                {"R2_BUCKET": "building-intent-social"}
             )
 
         complete = {
@@ -901,9 +901,25 @@ class PublishFlowTests(unittest.TestCase):
         }
         with self.assertRaisesRegex(
             ValueError,
-            "R2_BUCKET must be portfolio-social-staging",
+            "R2_BUCKET must be building-intent-social",
         ):
             load_required_env(complete)
+
+    def test_building_intent_bucket_is_accepted(self):
+        complete = {
+            "R2_ACCOUNT_ID": "account",
+            "R2_ACCESS_KEY_ID": "access",
+            "R2_SECRET_ACCESS_KEY": "secret",
+            "R2_BUCKET": "building-intent-social",
+            "IG_USER_ID": "user",
+            "IG_ACCESS_TOKEN": "token",
+            "META_API_VERSION": "v23.0",
+        }
+
+        self.assertEqual(
+            load_required_env(complete)["R2_BUCKET"],
+            "building-intent-social",
+        )
 
     def test_instagram_invalid_json_does_not_echo_response_body(self):
         def open_url(request, timeout):
