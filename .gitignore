@@ -1,2 +1,8 @@
 .superpowers/
 .worktrees/
+.venv/
+.social-work/
+__pycache__/
+*.pyc
+social/*.local.json
+social/*.local.env
