@@ -1,15 +1,16 @@
 # Instagram Promotion Automation Design
 
-**Status:** Approved design  
+**Status:** Approved design, revised
 **Date:** 2026-07-29  
 **Initial projects:** Say Better and Fina
 
 ## Goal
 
-Create one English Instagram carousel draft every day at 8:00 AM
-America/Vancouver time. Codex generates the content and illustrations, sends
-the completed slides and caption to this Codex task, and publishes through the
-Instagram API immediately after explicit chat approval.
+Create one English Instagram carousel proposal every day at 8:00 AM
+America/Vancouver time. Codex first sends the exact slide-by-slide copy and
+caption to this Codex task. It generates the illustrations only after explicit
+content approval, sends the completed carousel for a second approval, and
+publishes through the Instagram API immediately after final approval.
 
 The system must be safe to keep in this public repository. No credential,
 access token, generated presigned URL, or unpublished draft is committed.
@@ -19,10 +20,17 @@ access token, generated presigned URL, or unpublished draft is committed.
 - Use one Instagram account and rotate active projects fairly.
 - Start with one post per day. Additional daily slots can be added later.
 - Generate English content only.
-- Require explicit approval in this Codex task. `승인` publishes the latest
-  pending draft; revision feedback regenerates it without publishing.
+- Require two explicit approvals in this Codex task. `콘텐츠 승인` locks the
+  slide copy and permits image generation. `승인` publishes the latest
+  completed carousel. Revision feedback changes only the relevant stage and
+  never publishes.
 - Publish immediately after approval.
-- Use editorial illustrations similar to the supplied reference.
+- Use full-bleed editorial illustrations with copy integrated into each scene.
+- Art-direct every carousel and slide individually. Do not rotate a fixed
+  library of visual templates.
+- Allow scene-specific devices such as character speech bubbles, physical
+  notes, signs, annotations, environmental type, split scenes, and other
+  compositions invented for the content.
 - Do not depend on app UI screenshots.
 - Use the app logo, app name, official App Store badge, and a short CTA only on
   the final slide.
@@ -57,9 +65,9 @@ or present generic carousel content as personalized financial advice.
 
 ## Architecture
 
-The system has three stages and no custom web UI or database.
+The system has four stages and no custom web UI or database.
 
-### 1. Daily draft
+### 1. Daily content proposal
 
 A Codex recurring automation wakes this task at 8:00 AM America/Vancouver.
 Codex:
@@ -68,25 +76,49 @@ Codex:
 2. Chooses the least recently promoted eligible project.
 3. Selects a relatable problem, hook, storytelling format, and resulting slide
    count.
-4. Uses the Codex image model to create text-free editorial illustrations.
-5. Uses the already-installed Pillow library to compose English copy, slide
-   numbering, and branding at 1080×1350.
-6. Validates the draft and sends ordered slides, caption, and alt text to this
-   task.
+4. Writes the exact English headline and body for every numbered slide.
+5. Writes the matching Instagram caption.
+6. Sends only this content proposal to the task. No image is generated.
 
-### 2. Chat approval
+The approval message uses this stable structure:
 
-The draft remains local and private until approval.
+```text
+Project, topic, format, and total slide count
+Slide 1 — role
+Headline
+Body
+...
+Final slide — App CTA
+Headline
+Body
+Caption
+```
 
-- `승인` publishes the latest pending draft.
-- Revision feedback creates a new revision and invalidates the prior one.
-- `보류` leaves the draft unpublished.
-- If multiple daily slots are added later, approvals use the displayed draft
-  ID to remove ambiguity.
+### 2. Content approval and art direction
 
-No R2 upload or Instagram container is created before approval.
+- `콘텐츠 승인` locks the displayed copy and permits image generation.
+- Revision feedback produces a new content revision and invalidates the prior
+  one.
+- `보류` leaves the proposal unpublished and generates no images.
+- Every slide then receives a new scene plan derived from its approved meaning,
+  including subject placement, visual action, copy treatment, and exact text
+  region.
+- The Codex image model generates full-bleed illustrations around those text
+  regions. Pillow adds the approved copy exactly.
+- The completed ordered slides, caption, and alt text return to this task.
 
-### 3. Immediate publication
+### 3. Final approval
+
+- `승인` applies only to the latest completed carousel and permits
+  publication.
+- Image feedback regenerates only the affected slides without reopening
+  approved copy unless the user also requests a copy change.
+- A copy change returns the draft to content approval.
+- `보류` leaves the completed carousel unpublished.
+
+No R2 upload or Instagram container is created before final approval.
+
+### 4. Immediate publication
 
 After approval:
 
@@ -148,25 +180,44 @@ engine.
 
 ### Generated illustration
 
-The Codex image model produces illustration only:
+The Codex image model produces a new art-directed scene for every non-CTA
+slide:
 
-- No generated text, numbers, logos, bank screens, transaction data, or app UI.
+- The illustration fills the complete 1080×1350 frame.
+- No fixed visual template library or deterministic top/bottom copy slot.
 - One coherent art direction per carousel: shared palette, line weight,
-  character treatment, and scene vocabulary.
-- Composition leaves predictable safe areas for copy.
+  character treatment, texture, lighting, and scene vocabulary.
+- Each slide uses a composition appropriate to its meaning. Speech bubbles
+  belong to illustrated speakers; notes and signs behave like physical
+  objects; environmental typography follows the scene.
+- The scene plan reserves precise, uncluttered regions for exact copy without
+  forcing every slide into the same layout.
+- Recent composition plans are recorded and close repetitions are rejected.
+- Prompts reject generic startup illustration, fake interface fragments,
+  nonsensical microtext, malformed anatomy, and decorative objects that do not
+  support the idea.
+- Generated art contains no final text, numbers, logos, bank screens,
+  transaction data, or app UI. Empty speech bubbles and text-bearing props are
+  filled deterministically after generation.
 - Illustrations must not reproduce private user data or imply a real financial
   account.
 
 ### Deterministic composition
 
-Pillow composes all exact elements:
+Pillow composes all exact elements from the per-slide scene plan:
 
 - Canvas: 1080×1350 JPEG.
 - Typeface: installed Ubuntu Sans.
-- Text, numbering, logo, CTA, and App Store badge are rendered from approved
+- Text may be placed in speech bubbles, on physical props, along environmental
+  lines, or in other scene-specific regions while preserving exact approved
+  wording.
+- Text regions include coordinates, alignment, color, contrast treatment,
+  optional rotation, and an optional bubble-tail or prop anchor.
+- Slide numbering, logo, CTA, and App Store badge are rendered from approved
   source assets.
 - Copy is short enough to remain readable on a phone.
-- Contrast and text bounds are validated before the draft is shown.
+- Contrast, text bounds, overlap, and safe margins are validated before the
+  completed carousel is shown.
 - Each slide receives meaningful alt text.
 
 Brand palettes start from the approved logos:
@@ -201,7 +252,8 @@ The implementation should remain small:
   history.
 - `social/assets/` — approved logos and the official App Store badge.
 
-Unpublished drafts and rendered output live in an ignored local work directory.
+Unpublished content proposals, scene plans, generated art, and rendered output
+live in an ignored local work directory.
 The App Store URLs are entered during initial setup because neither private
 repository currently contains a verified public product URL.
 
@@ -238,8 +290,8 @@ backup bucket.
 ## Secrets
 
 The public repository contains variable names and setup instructions only.
-Actual values live outside the repository in a permission-restricted local
-configuration file or Codex-managed secret environment.
+Actual values live in the ignored repository-root `.env`, restricted to the
+local user, or in Codex-managed secret environment variables.
 
 Required secrets:
 
@@ -249,7 +301,7 @@ Required secrets:
 
 Rules:
 
-- Never place secrets in `.env` inside this repository.
+- Keep `.env` ignored, permission-restricted, and absent from commits.
 - Never print authorization headers, tokens, presigned URLs, or provider
   response bodies containing credentials.
 - Parse any local credential file as data; do not execute it with `source`.
@@ -257,17 +309,17 @@ Rules:
 
 ## Idempotency and Failure Handling
 
-Every draft has a unique ID and one state:
+Every draft has a unique ID and follows two approval gates:
 
-`drafted → approved → publishing → published`
+`content_drafted → content_approved → rendered → approved → publishing → published`
 
-or
-
-`drafted → revised/held`
+or a revision/hold terminal state from either approval gate.
 
 Publication records the final Instagram media ID before reporting success.
 Retries inspect history first:
 
+- Images cannot be generated before `content_approved`.
+- Publication cannot start before the separate final `approved` event.
 - A published draft is never published again.
 - A partial child-container failure never creates a parent carousel.
 - A parent container is published once.
@@ -282,13 +334,15 @@ Retries inspect history first:
 
 Keep verification proportional to the small implementation:
 
-1. One runnable test file covers rendering bounds and the publication state
-   machine with provider calls replaced by local fakes.
-2. The failure-path check proves that R2 cleanup runs after a child-container,
+1. One runnable test file covers content approval, rendering bounds, and the
+   publication state machine with provider calls replaced by local fakes.
+2. A state check proves image generation is unavailable before content approval
+   and publication is unavailable before final approval.
+3. The failure-path check proves that R2 cleanup runs after a child-container,
    parent-container, or publish failure.
-3. The idempotency check proves that a recorded Instagram media ID prevents a
+4. The idempotency check proves that a recorded Instagram media ID prevents a
    second publish call.
-4. Setup concludes with one explicitly approved end-to-end test carousel on
+5. Setup concludes with one explicitly approved end-to-end test carousel on
    the new professional account, followed by verification that the R2 prefix is
    empty.
 
