@@ -301,7 +301,10 @@ def approve(draft: dict, history: Path) -> None:
     events = read_events(history)
     latest = latest_event(draft["draft_id"], events)
     state = latest.get("event") if latest else None
-    if state in {"approved", "publish_failed"}:
+    if state in {"approved", "publish_failed"} or (
+        state == "cleanup_completed"
+        and latest.get("resume_event") == "publish_failed"
+    ):
         return
     if state != "rendered":
         raise RuntimeError("rendered carousel required")

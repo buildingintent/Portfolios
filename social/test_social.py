@@ -372,7 +372,7 @@ class RenderTests(unittest.TestCase):
             encoding="utf-8",
         )
         history_path = self.work_dir / "history.jsonl"
-        draft = self.valid_draft()
+        draft = content_only_draft()
         record_content_state(draft, "content_drafted", history_path)
         record_content_state(draft, "content_approved", history_path)
 
@@ -390,6 +390,46 @@ class RenderTests(unittest.TestCase):
             ["content_drafted", "content_approved", "rendered"],
         )
         self.assertEqual(events[-1]["draft_id"], "2026-07-30-fina-01")
+
+    def test_render_file_rejects_content_changed_after_approval(self):
+        draft_path = self.work_dir / "draft.json"
+        draft = self.valid_draft()
+        draft_path.write_text(json.dumps(draft), encoding="utf-8")
+        config_path = self.work_dir / "projects.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "formats": ["what-happens-next"],
+                    "projects": [self.project()],
+                }
+            ),
+            encoding="utf-8",
+        )
+        history_path = self.work_dir / "history.jsonl"
+        approved = content_only_draft()
+        record_content_state(
+            approved,
+            "content_drafted",
+            history_path,
+        )
+        record_content_state(
+            approved,
+            "content_approved",
+            history_path,
+        )
+        draft["slides"][0]["headline"] = "Changed after approval."
+        draft_path.write_text(json.dumps(draft), encoding="utf-8")
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "content approval does not match draft",
+        ):
+            render_file(
+                draft_path,
+                self.output_dir,
+                config_path=config_path,
+                history_path=history_path,
+            )
 
 
 class PublicationStateTests(unittest.TestCase):
@@ -916,9 +956,22 @@ class PublishFlowTests(unittest.TestCase):
         self.r2.fail_cleanup = False
 
         cleanup_only("d1", self.r2, self.history)
+        self.instagram.fail_at = None
 
-        self.assertIsNone(
-            assert_publishable("d1", read_events(self.history))
+        self.assertEqual(
+            publish(
+                self.draft,
+                self.files,
+                self.r2,
+                self.instagram,
+                self.history,
+            ),
+            "media-1",
+        )
+        self.assertEqual(self.instagram.publish_calls, 1)
+        self.assertEqual(
+            latest_event("d1", read_events(self.history))["event"],
+            "published",
         )
 
     def test_r2_uses_expiring_get_urls_and_cleans_every_page(self):

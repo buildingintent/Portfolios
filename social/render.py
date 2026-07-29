@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -76,6 +77,53 @@ def _draft_event(draft: dict, event: str) -> dict:
     }
 
 
+def _content_fingerprint(draft: dict) -> str:
+    content = {
+        key: value
+        for key, value in draft.items()
+        if key != "art_direction"
+    }
+    slides = content.get("slides")
+    if isinstance(slides, list):
+        content["slides"] = [
+            {
+                key: value
+                for key, value in slide.items()
+                if key not in {
+                    "alt_text",
+                    "illustration",
+                    "scene",
+                    "text_layout",
+                }
+            }
+            if isinstance(slide, dict)
+            else slide
+            for slide in slides
+        ]
+    encoded = json.dumps(
+        content,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _assert_approved_content(
+    draft_id: str,
+    events: list[dict],
+    content_fingerprint: str,
+) -> None:
+    for event in reversed(events):
+        if (
+            event.get("draft_id") == draft_id
+            and event.get("event") == "content_approved"
+        ):
+            if event.get("content_fingerprint") != content_fingerprint:
+                raise RuntimeError("content approval does not match draft")
+            return
+    raise RuntimeError("content approval required")
+
+
 def record_content_state(
     draft: dict,
     state: str,
@@ -92,7 +140,10 @@ def record_content_state(
         return
     if current != expected:
         raise RuntimeError("invalid content state transition")
-    append_event(history, _draft_event(draft, state))
+    event = _draft_event(draft, state)
+    if state == "content_approved":
+        event["content_fingerprint"] = _content_fingerprint(draft)
+    append_event(history, event)
 
 
 def assert_renderable(draft_id: str, events: list[dict]) -> None:
@@ -107,6 +158,11 @@ def mark_rendered(draft: dict, history: Path) -> None:
     if latest and latest.get("event") == "rendered":
         return
     assert_renderable(draft["draft_id"], events)
+    _assert_approved_content(
+        draft["draft_id"],
+        events,
+        _content_fingerprint(draft),
+    )
     append_event(history, _draft_event(draft, "rendered"))
 
 
@@ -613,6 +669,11 @@ def render_file(
     latest = latest_event(draft["draft_id"], events)
     if latest is None or latest.get("event") != "rendered":
         assert_renderable(draft["draft_id"], events)
+    _assert_approved_content(
+        draft["draft_id"],
+        events,
+        _content_fingerprint(draft),
+    )
     outputs = render_draft(
         draft,
         project,
