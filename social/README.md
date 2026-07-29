@@ -73,59 +73,28 @@ References:
 
 ## 4. Store secrets outside Git
 
-Prefer Codex-managed secrets for the recurring automation.
+Local secrets are read from the repository-root `.env`, which is ignored by
+Git and must have permission `600`. It contains:
 
-For local testing, create
-`/home/cwsbr/.config/portfolio-social/credentials.json` with permission `600`.
-The file must contain these keys:
-
-- `IG_USER_ID`
-- `IG_ACCESS_TOKEN`
-- `META_API_VERSION`
+- `INSTAGRAM_ACCESS_TOKEN`
 - `R2_ACCOUNT_ID`
 - `R2_ACCESS_KEY_ID`
 - `R2_SECRET_ACCESS_KEY`
-- `R2_BUCKET`
 
-`R2_BUCKET` must be `building-intent-social`. Never place this file, an
-`.env`, tokens, or presigned URLs inside the repository. Never paste secret
-values into a Codex chat.
-
-Create the protected empty file, then fill it in with a local editor:
+`R2_ACCESS_TOKEN` is not used by the publisher. The Instagram user ID, Meta API
+version, and `building-intent-social` bucket name are fixed public
+configuration. Never commit `.env`, paste secrets into a Codex chat, or print
+tokens and presigned URLs.
 
 ```bash
-mkdir -p /home/cwsbr/.config/portfolio-social
-install -m 600 /dev/null \
-  /home/cwsbr/.config/portfolio-social/credentials.json
+chmod 600 .env
+uv run --env-file .env .venv/bin/python social/publish.py \
+  .social-work/2026-07-30-fina-01/draft.json \
+  .social-work/2026-07-30-fina-01/rendered
 ```
 
-To run a local publication without sourcing the credentials file:
-
-```bash
-.venv/bin/python - <<'PY'
-import json
-import os
-import subprocess
-from pathlib import Path
-
-credentials = json.loads(
-    Path("/home/cwsbr/.config/portfolio-social/credentials.json")
-    .read_text(encoding="utf-8")
-)
-command = [
-    ".venv/bin/python",
-    "social/publish.py",
-    ".social-work/2026-07-30-fina-01/draft.json",
-    ".social-work/2026-07-30-fina-01/rendered",
-]
-raise SystemExit(
-    subprocess.call(command, env={**os.environ, **credentials})
-)
-PY
-```
-
-Use the approved draft's real path. The credentials JSON is parsed as data and
-is never executed by the shell.
+Use the approved draft's real path. `uv` parses `.env` without executing it as
+a shell script.
 
 ## Daily operation
 

@@ -884,41 +884,26 @@ class PublishFlowTests(unittest.TestCase):
     def test_missing_credentials_are_rejected_before_network_access(self):
         with self.assertRaisesRegex(
             ValueError,
-            "IG_ACCESS_TOKEN.*R2_SECRET_ACCESS_KEY",
+            "INSTAGRAM_ACCESS_TOKEN.*R2_SECRET_ACCESS_KEY",
         ):
-            load_required_env(
-                {"R2_BUCKET": "building-intent-social"}
-            )
+            load_required_env({})
 
-        complete = {
+    def test_current_secret_names_build_runtime_configuration(self):
+        secrets = {
             "R2_ACCOUNT_ID": "account",
             "R2_ACCESS_KEY_ID": "access",
             "R2_SECRET_ACCESS_KEY": "secret",
-            "R2_BUCKET": "wrong-bucket",
-            "IG_USER_ID": "user",
-            "IG_ACCESS_TOKEN": "token",
-            "META_API_VERSION": "v23.0",
-        }
-        with self.assertRaisesRegex(
-            ValueError,
-            "R2_BUCKET must be building-intent-social",
-        ):
-            load_required_env(complete)
-
-    def test_building_intent_bucket_is_accepted(self):
-        complete = {
-            "R2_ACCOUNT_ID": "account",
-            "R2_ACCESS_KEY_ID": "access",
-            "R2_SECRET_ACCESS_KEY": "secret",
-            "R2_BUCKET": "building-intent-social",
-            "IG_USER_ID": "user",
-            "IG_ACCESS_TOKEN": "token",
-            "META_API_VERSION": "v23.0",
+            "INSTAGRAM_ACCESS_TOKEN": "token",
         }
 
         self.assertEqual(
-            load_required_env(complete)["R2_BUCKET"],
-            "building-intent-social",
+            load_required_env(secrets),
+            {
+                **secrets,
+                "IG_USER_ID": "17841425833103994",
+                "META_API_VERSION": "v23.0",
+                "R2_BUCKET": "building-intent-social",
+            },
         )
 
     def test_instagram_invalid_json_does_not_echo_response_body(self):

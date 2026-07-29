@@ -1,5 +1,6 @@
 .superpowers/
 .worktrees/
+.env
 .venv/
 .social-work/
 __pycache__/

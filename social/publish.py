@@ -25,14 +25,14 @@ from social.render import (
 
 
 HISTORY_PATH = Path(__file__).resolve().parent / "history.jsonl"
+IG_USER_ID = "17841425833103994"
+META_API_VERSION = "v23.0"
+R2_BUCKET = "building-intent-social"
 REQUIRED_ENV = (
-    "IG_USER_ID",
-    "IG_ACCESS_TOKEN",
-    "META_API_VERSION",
+    "INSTAGRAM_ACCESS_TOKEN",
     "R2_ACCOUNT_ID",
     "R2_ACCESS_KEY_ID",
     "R2_SECRET_ACCESS_KEY",
-    "R2_BUCKET",
 )
 
 
@@ -78,14 +78,12 @@ def load_required_env(environ: dict[str, str]) -> dict[str, str]:
             "missing required environment variables: "
             + ", ".join(missing)
         )
-    values = {name: environ[name] for name in REQUIRED_ENV}
-    if values["R2_BUCKET"] != "building-intent-social":
-        raise ValueError(
-            "R2_BUCKET must be building-intent-social"
-        )
-    if not re.fullmatch(r"v\d+\.\d+", values["META_API_VERSION"]):
-        raise ValueError("META_API_VERSION must look like v23.0")
-    return values
+    return {
+        **{name: environ[name] for name in REQUIRED_ENV},
+        "IG_USER_ID": IG_USER_ID,
+        "META_API_VERSION": META_API_VERSION,
+        "R2_BUCKET": R2_BUCKET,
+    }
 
 
 def make_r2_client(env: dict[str, str]):
@@ -505,7 +503,7 @@ def main() -> int:
         r2 = _r2(env)
         instagram = Instagram(
             env["IG_USER_ID"],
-            env["IG_ACCESS_TOKEN"],
+            env["INSTAGRAM_ACCESS_TOKEN"],
             env["META_API_VERSION"],
         )
         media_id = publish(

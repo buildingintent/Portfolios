@@ -149,7 +149,7 @@ Do not create R2 objects or Instagram containers at this stage.
 - Exact `승인`: publish the newest non-terminal draft with:
 
   ```bash
-  .venv/bin/python social/publish.py \
+  uv run --env-file .env .venv/bin/python social/publish.py \
     .social-work/2026-07-30-fina-01/draft.json \
     .social-work/2026-07-30-fina-01/rendered
   ```
@@ -167,7 +167,7 @@ Do not create R2 objects or Instagram containers at this stage.
 - If multiple drafts await a decision, require the displayed draft ID with
   approval.
 - If publication reports `cleanup_failed`, run
-  `.venv/bin/python social/publish.py --cleanup-only {draft_id}` before any
-  new draft.
+  `uv run --env-file .env .venv/bin/python social/publish.py
+  --cleanup-only {draft_id}` before any new draft.
 - If publication stops in `publishing`, do not retry. Report the container ID
   and require manual Instagram reconciliation to avoid a duplicate post.
