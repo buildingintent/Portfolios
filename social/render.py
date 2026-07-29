@@ -330,6 +330,7 @@ def validate_draft(
     errors = validate_content(draft, project, blocked_formats)
     if not _non_empty_string(draft.get("art_direction")):
         errors.append("art_direction must be a non-empty string")
+    scenes = set()
     for index, slide in enumerate(draft.get("slides", []), start=1):
         if not isinstance(slide, dict):
             continue
@@ -342,10 +343,15 @@ def validate_draft(
                 errors.append(
                     "illustration paths must stay inside the draft directory"
                 )
-            if not _non_empty_string(slide.get("scene")):
+            scene = slide.get("scene")
+            if not _non_empty_string(scene):
                 errors.append(
                     f"slide {index} scene must be a non-empty string"
                 )
+            elif scene.strip().casefold() in scenes:
+                errors.append("non-CTA slide scenes must be distinct")
+            else:
+                scenes.add(scene.strip().casefold())
             layout = slide.get("text_layout")
             headline = layout.get("headline") if isinstance(layout, dict) else None
             body = layout.get("body") if isinstance(layout, dict) else None

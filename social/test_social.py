@@ -110,7 +110,10 @@ class DraftValidationTests(unittest.TestCase):
                     "headline": "Your balance looks fine.",
                     "body": "Next Tuesday might not.",
                     "illustration": "art-01.png",
-                    "scene": "A concise description of the unique visual composition",
+                    "scene": (
+                        "A person at a kitchen table studies a Tuesday "
+                        "calendar, with open sky on the right."
+                    ),
                     "text_layout": text_layout(),
                     "alt_text": "A person looking ahead at approaching bills.",
                 },
@@ -119,8 +122,11 @@ class DraftValidationTests(unittest.TestCase):
                     "headline": "Today",
                     "body": "Some of that balance is already spoken for.",
                     "illustration": "art-02.png",
-                    "scene": "A concise description of the unique visual composition",
-                    "text_layout": text_layout(),
+                    "scene": (
+                        "A balance card floats above labeled envelopes along "
+                        "the lower edge, leaving space at top left."
+                    ),
+                    "text_layout": text_layout(120, 470),
                     "alt_text": "Envelopes beside a current balance.",
                 },
                 {
@@ -128,8 +134,11 @@ class DraftValidationTests(unittest.TestCase):
                     "headline": "Next Tuesday",
                     "body": "Two automatic payments arrive together.",
                     "illustration": "art-03.png",
-                    "scene": "A concise description of the unique visual composition",
-                    "text_layout": text_layout(),
+                    "scene": (
+                        "Two bill notices land on one Tuesday calendar square, "
+                        "with the upper-left corner clear for copy."
+                    ),
+                    "text_layout": text_layout(670, 960),
                     "alt_text": "Two bills landing on one calendar date.",
                 },
                 {
@@ -269,6 +278,15 @@ class DraftValidationTests(unittest.TestCase):
         errors = validate_draft(draft, self.project(), set())
         self.assertIn("art_direction must be a non-empty string", errors)
         self.assertIn("slide 1 scene must be a non-empty string", errors)
+
+    def test_rejects_reused_scene_descriptions(self):
+        draft = self.valid_draft()
+        draft["slides"][1]["scene"] = draft["slides"][0]["scene"]
+
+        self.assertIn(
+            "non-CTA slide scenes must be distinct",
+            validate_draft(draft, self.project(), set()),
+        )
 
     def test_rejects_draft_id_that_is_unsafe_for_staging(self):
         draft = self.valid_draft()
@@ -517,9 +535,18 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(
             events[-1].get("scenes"),
             [
-                "A concise description of the unique visual composition",
-                "A concise description of the unique visual composition",
-                "A concise description of the unique visual composition",
+                (
+                    "A person at a kitchen table studies a Tuesday "
+                    "calendar, with open sky on the right."
+                ),
+                (
+                    "A balance card floats above labeled envelopes along "
+                    "the lower edge, leaving space at top left."
+                ),
+                (
+                    "Two bill notices land on one Tuesday calendar square, "
+                    "with the upper-left corner clear for copy."
+                ),
             ],
         )
 
