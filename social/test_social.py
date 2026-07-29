@@ -32,6 +32,7 @@ from social.publish import (
     latest_event,
     load_required_env,
     publish,
+    record_terminal,
     verify_rendered,
 )
 
@@ -462,6 +463,43 @@ class PublicationStateTests(unittest.TestCase):
             ["drafted", "approved"],
         )
 
+    def test_revision_and_hold_are_recorded_as_terminal_states(self):
+        draft = {
+            "draft_id": "d1",
+            "project_id": "fina",
+            "format_id": "what-happens-next",
+        }
+        append_event(
+            self.history,
+            {**draft, "event": "drafted"},
+        )
+
+        record_terminal(draft, "revised", self.history)
+
+        self.assertEqual(
+            latest_event("d1", read_events(self.history))["event"],
+            "revised",
+        )
+        with self.assertRaisesRegex(RuntimeError, "not publishable"):
+            record_terminal(draft, "held", self.history)
+
+    def test_only_revision_or_hold_can_be_recorded_manually(self):
+        draft = {
+            "draft_id": "d1",
+            "project_id": "fina",
+            "format_id": "what-happens-next",
+        }
+        append_event(
+            self.history,
+            {**draft, "event": "drafted"},
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "manual state must be revised or held",
+        ):
+            record_terminal(draft, "published", self.history)
+
 
 class FakeR2:
     def __init__(self):
@@ -834,9 +872,11 @@ class PublishFlowTests(unittest.TestCase):
                 "child-1?fields=status_code"
             ),
         )
+        authorization = requests[0].headers["Authorization"]
+        self.assertTrue(authorization.startswith("Bearer "))
         self.assertEqual(
-            requests[0].headers["Authorization"],
-            "Bearer secret-token",
+            authorization.removeprefix("Bearer "),
+            "secret-token",
         )
         self.assertEqual(sleeps, [2])
         self.assertEqual(media, "media-1")

@@ -259,8 +259,8 @@ social/*.local.env
 Create the local environment and install the two runtime dependencies:
 
 ```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -r social/requirements.txt
+uv venv .venv
+uv pip install --python .venv/bin/python -r social/requirements.txt
 ```
 
 - [ ] **Step 4: Copy and verify the approved app logos**

@@ -316,6 +316,17 @@ def approve(draft: dict, history: Path) -> None:
         append_event(history, _event(draft, "approved"))
 
 
+def record_terminal(
+    draft: dict,
+    state: str,
+    history: Path,
+) -> None:
+    if state not in {"revised", "held"}:
+        raise ValueError("manual state must be revised or held")
+    assert_publishable(draft["draft_id"], read_events(history))
+    append_event(history, _event(draft, state))
+
+
 def publish(
     draft: dict,
     files: list[Path],
@@ -454,8 +465,28 @@ def main() -> int:
     parser.add_argument("draft", nargs="?", type=Path)
     parser.add_argument("rendered", nargs="?", type=Path)
     parser.add_argument("--cleanup-only", metavar="DRAFT_ID")
+    parser.add_argument(
+        "--record-state",
+        choices=("revised", "held"),
+    )
     args = parser.parse_args()
     try:
+        if args.record_state:
+            if args.draft is None or args.rendered is not None:
+                raise ValueError(
+                    "--record-state requires one draft JSON path"
+                )
+            draft = load_json(args.draft)
+            record_terminal(
+                draft,
+                args.record_state,
+                HISTORY_PATH,
+            )
+            print(
+                f"recorded {args.record_state} for "
+                f"{draft['draft_id']}"
+            )
+            return 0
         if args.cleanup_only:
             env = load_required_env(dict(os.environ))
             r2 = _r2(env)
