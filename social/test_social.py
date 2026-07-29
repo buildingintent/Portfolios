@@ -18,6 +18,11 @@ from social.render import (
     validate_draft,
     validate_illustrations,
 )
+from social.publish import (
+    append_event,
+    assert_publishable,
+    latest_event,
+)
 
 
 class DraftValidationTests(unittest.TestCase):
@@ -318,6 +323,101 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["event"], "drafted")
         self.assertEqual(events[0]["draft_id"], "2026-07-30-fina-01")
+
+
+class PublicationStateTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.root = Path(self.temp_dir.name)
+        self.history = self.root / "history.jsonl"
+
+    def test_published_draft_cannot_publish_twice(self):
+        append_event(
+            self.history,
+            {
+                "draft_id": "d1",
+                "event": "published",
+                "instagram_media_id": "m1",
+            },
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "already published"):
+            assert_publishable("d1", read_events(self.history))
+
+    def test_uncertain_publishing_state_blocks_automatic_retry(self):
+        append_event(
+            self.history,
+            {
+                "draft_id": "d1",
+                "event": "publishing",
+                "container_id": "c1",
+            },
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "manual reconciliation required",
+        ):
+            assert_publishable("d1", read_events(self.history))
+
+    def test_revised_or_held_draft_cannot_publish(self):
+        for state in ("revised", "held"):
+            history = self.root / f"{state}.jsonl"
+            append_event(
+                history,
+                {"draft_id": "d1", "event": state},
+            )
+            with self.assertRaisesRegex(RuntimeError, "not publishable"):
+                assert_publishable("d1", read_events(history))
+
+    def test_cleanup_failure_requires_cleanup_only(self):
+        append_event(
+            self.history,
+            {
+                "draft_id": "d1",
+                "event": "published",
+                "instagram_media_id": "m1",
+            },
+        )
+        append_event(
+            self.history,
+            {
+                "draft_id": "d1",
+                "event": "cleanup_failed",
+                "instagram_media_id": "m1",
+            },
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "cleanup only required"):
+            assert_publishable("d1", read_events(self.history))
+
+    def test_only_safe_states_can_start_publish(self):
+        for state in ("drafted", "approved", "publish_failed"):
+            history = self.root / f"{state}.jsonl"
+            append_event(
+                history,
+                {"draft_id": "d1", "event": state},
+            )
+            self.assertIsNone(
+                assert_publishable("d1", read_events(history))
+            )
+
+    def test_missing_draft_history_is_not_publishable(self):
+        with self.assertRaisesRegex(RuntimeError, "not publishable"):
+            assert_publishable("d1", [])
+
+    def test_latest_event_returns_only_requested_draft(self):
+        events = [
+            {"draft_id": "d1", "event": "drafted"},
+            {"draft_id": "d2", "event": "published"},
+            {"draft_id": "d1", "event": "approved"},
+        ]
+
+        self.assertEqual(
+            latest_event("d1", events),
+            {"draft_id": "d1", "event": "approved"},
+        )
 
 
 if __name__ == "__main__":
