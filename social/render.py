@@ -60,6 +60,56 @@ def append_event(path: Path, event: dict) -> None:
         os.fsync(history.fileno())
 
 
+def latest_event(draft_id: str, events: list[dict]) -> dict | None:
+    for event in reversed(events):
+        if event.get("draft_id") == draft_id:
+            return event
+    return None
+
+
+def _draft_event(draft: dict, event: str) -> dict:
+    return {
+        "draft_id": draft["draft_id"],
+        "project_id": draft["project_id"],
+        "format_id": draft["format_id"],
+        "event": event,
+    }
+
+
+def record_content_state(
+    draft: dict,
+    state: str,
+    history: Path,
+) -> None:
+    if state not in {"content_drafted", "content_approved"}:
+        raise ValueError("invalid content state")
+    latest = latest_event(draft["draft_id"], read_events(history))
+    current = latest.get("event") if latest else None
+    expected = (
+        None if state == "content_drafted" else "content_drafted"
+    )
+    if current == state:
+        return
+    if current != expected:
+        raise RuntimeError("invalid content state transition")
+    append_event(history, _draft_event(draft, state))
+
+
+def assert_renderable(draft_id: str, events: list[dict]) -> None:
+    latest = latest_event(draft_id, events)
+    if latest is None or latest.get("event") != "content_approved":
+        raise RuntimeError("content approval required")
+
+
+def mark_rendered(draft: dict, history: Path) -> None:
+    events = read_events(history)
+    latest = latest_event(draft["draft_id"], events)
+    if latest and latest.get("event") == "rendered":
+        return
+    assert_renderable(draft["draft_id"], events)
+    append_event(history, _draft_event(draft, "rendered"))
+
+
 def recent_published_formats(
     events: list[dict],
     now: datetime,
@@ -99,7 +149,7 @@ def _safe_illustration_path(value: Any) -> bool:
     )
 
 
-def validate_draft(
+def validate_content(
     draft: dict,
     project: dict,
     blocked_formats: set[str],
@@ -177,16 +227,12 @@ def validate_draft(
             errors.append(
                 f"slide {index + 1} must have kind {expected_kind}"
             )
-        for field in ("headline", "body", "alt_text"):
+        for field in ("headline", "body"):
             if not _non_empty_string(slide.get(field)):
                 errors.append(
                     f"slide {index + 1} {field} must be a non-empty string"
                 )
         if expected_kind != "cta":
-            if not _safe_illustration_path(slide.get("illustration")):
-                errors.append(
-                    "illustration paths must stay inside the draft directory"
-                )
             copy = " ".join(
                 value
                 for value in (
@@ -200,8 +246,6 @@ def validate_draft(
                     "app name may appear only on the CTA slide"
                 )
         else:
-            if "illustration" in slide:
-                errors.append("CTA slide must not include an illustration")
             copy = " ".join(
                 value
                 for value in (
@@ -212,6 +256,29 @@ def validate_draft(
             )
             if app_name and not _mentions_app(copy, app_name):
                 errors.append("CTA slide must name the app")
+    return list(dict.fromkeys(errors))
+
+
+def validate_draft(
+    draft: dict,
+    project: dict,
+    blocked_formats: set[str],
+) -> list[str]:
+    errors = validate_content(draft, project, blocked_formats)
+    for index, slide in enumerate(draft.get("slides", []), start=1):
+        if not isinstance(slide, dict):
+            continue
+        if not _non_empty_string(slide.get("alt_text")):
+            errors.append(
+                f"slide {index} alt_text must be a non-empty string"
+            )
+        if slide.get("kind") != "cta":
+            if not _safe_illustration_path(slide.get("illustration")):
+                errors.append(
+                    "illustration paths must stay inside the draft directory"
+                )
+        elif "illustration" in slide:
+            errors.append("CTA slide must not include an illustration")
     return list(dict.fromkeys(errors))
 
 
@@ -509,6 +576,27 @@ def validate_file(
     return errors
 
 
+def validate_content_file(
+    draft_path: Path,
+    config_path: Path = CONFIG_PATH,
+    history_path: Path = HISTORY_PATH,
+) -> list[str]:
+    config = load_json(config_path)
+    draft = load_json(draft_path)
+    project = _project(config, draft.get("project_id", ""))
+    errors = validate_content(
+        draft,
+        project,
+        recent_published_formats(
+            read_events(history_path),
+            datetime.now(TIMEZONE),
+        ),
+    )
+    if draft.get("format_id") not in config.get("formats", []):
+        errors.append("format_id is not configured")
+    return list(dict.fromkeys(errors))
+
+
 def render_file(
     draft_path: Path,
     output_dir: Path,
@@ -521,25 +609,17 @@ def render_file(
     errors = validate_file(draft_path, config_path, history_path)
     if errors:
         raise ValueError("\n".join(errors))
+    events = read_events(history_path)
+    latest = latest_event(draft["draft_id"], events)
+    if latest is None or latest.get("event") != "rendered":
+        assert_renderable(draft["draft_id"], events)
     outputs = render_draft(
         draft,
         project,
         draft_path.parent,
         output_dir,
     )
-    if not any(
-        event.get("draft_id") == draft["draft_id"]
-        for event in read_events(history_path)
-    ):
-        append_event(
-            history_path,
-            {
-                "draft_id": draft["draft_id"],
-                "project_id": draft["project_id"],
-                "format_id": draft["format_id"],
-                "event": "drafted",
-            },
-        )
+    mark_rendered(draft, history_path)
     return outputs
 
 
@@ -548,11 +628,30 @@ def main() -> int:
     subparsers = parser.add_subparsers(dest="command", required=True)
     validate_parser = subparsers.add_parser("validate")
     validate_parser.add_argument("draft", type=Path)
+    record_parser = subparsers.add_parser("record-content")
+    record_parser.add_argument("draft", type=Path)
+    approve_parser = subparsers.add_parser("approve-content")
+    approve_parser.add_argument("draft", type=Path)
     render_parser = subparsers.add_parser("render")
     render_parser.add_argument("draft", type=Path)
     render_parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
 
+    if args.command in {"record-content", "approve-content"}:
+        errors = validate_content_file(args.draft)
+        if errors:
+            for error in errors:
+                print(error)
+            return 2
+        draft = load_json(args.draft)
+        state = (
+            "content_drafted"
+            if args.command == "record-content"
+            else "content_approved"
+        )
+        record_content_state(draft, state, HISTORY_PATH)
+        print(f"recorded {state} for {draft['draft_id']}")
+        return 0
     if args.command == "validate":
         errors = validate_file(args.draft)
         if errors:

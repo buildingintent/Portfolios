@@ -18,6 +18,7 @@ if __package__ in {None, ""}:
 
 from social.render import (
     append_event,
+    latest_event,
     load_json,
     read_events,
     validate_file,
@@ -34,13 +35,6 @@ REQUIRED_ENV = (
     "R2_ACCESS_KEY_ID",
     "R2_SECRET_ACCESS_KEY",
 )
-
-
-def latest_event(draft_id: str, events: list[dict]) -> dict | None:
-    for event in reversed(events):
-        if event.get("draft_id") == draft_id:
-            return event
-    return None
 
 
 def assert_publishable(draft_id: str, events: list[dict]) -> None:
@@ -67,7 +61,7 @@ def assert_publishable(draft_id: str, events: list[dict]) -> None:
         raise RuntimeError("draft already published")
     if state in {"revised", "held"}:
         raise RuntimeError("draft is not publishable")
-    if state not in {"drafted", "approved", "publish_failed"}:
+    if state not in {"approved", "publish_failed"}:
         raise RuntimeError("draft is not publishable")
 
 
@@ -305,12 +299,13 @@ def _event(draft: dict, event: str, **details) -> dict:
 
 def approve(draft: dict, history: Path) -> None:
     events = read_events(history)
-    assert_publishable(draft["draft_id"], events)
-    if latest_event(
-        draft["draft_id"],
-        events,
-    ).get("event") != "approved":
-        append_event(history, _event(draft, "approved"))
+    latest = latest_event(draft["draft_id"], events)
+    state = latest.get("event") if latest else None
+    if state in {"approved", "publish_failed"}:
+        return
+    if state != "rendered":
+        raise RuntimeError("rendered carousel required")
+    append_event(history, _event(draft, "approved"))
 
 
 def record_terminal(
@@ -320,7 +315,15 @@ def record_terminal(
 ) -> None:
     if state not in {"revised", "held"}:
         raise ValueError("manual state must be revised or held")
-    assert_publishable(draft["draft_id"], read_events(history))
+    latest = latest_event(draft["draft_id"], read_events(history))
+    if latest is None or latest.get("event") not in {
+        "drafted",
+        "content_drafted",
+        "content_approved",
+        "rendered",
+        "approved",
+    }:
+        raise RuntimeError("draft is not publishable")
     append_event(history, _event(draft, state))
 
 
@@ -332,6 +335,7 @@ def publish(
     history: Path,
 ) -> str:
     approve(draft, history)
+    assert_publishable(draft["draft_id"], read_events(history))
 
     media_id = None
     original_error = None

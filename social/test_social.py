@@ -13,12 +13,17 @@ from zoneinfo import ZoneInfo
 from PIL import Image
 
 from social.render import (
+    assert_renderable,
     load_json,
+    latest_event,
+    mark_rendered,
     read_events,
+    record_content_state,
     recent_published_formats,
     render_draft,
     render_file,
     render_slide,
+    validate_content,
     validate_draft,
     validate_illustrations,
 )
@@ -29,12 +34,22 @@ from social.publish import (
     append_event,
     assert_publishable,
     cleanup_only,
-    latest_event,
     load_required_env,
     publish,
     record_terminal,
     verify_rendered,
 )
+
+
+def content_only_draft():
+    draft = DraftValidationTests.valid_draft()
+    draft.pop("art_direction", None)
+    for slide in draft["slides"]:
+        slide.pop("alt_text", None)
+        slide.pop("illustration", None)
+        slide.pop("scene", None)
+        slide.pop("text_layout", None)
+    return draft
 
 
 class DraftValidationTests(unittest.TestCase):
@@ -102,6 +117,32 @@ class DraftValidationTests(unittest.TestCase):
         self.assertEqual(
             validate_draft(self.valid_draft(), self.project(), set()),
             [],
+        )
+
+    def test_accepts_content_before_art_exists(self):
+        self.assertEqual(
+            validate_content(
+                content_only_draft(),
+                self.project(),
+                set(),
+            ),
+            [],
+        )
+
+    def test_render_ready_validation_still_requires_art_fields(self):
+        errors = validate_draft(
+            content_only_draft(),
+            self.project(),
+            set(),
+        )
+
+        self.assertIn(
+            "slide 1 alt_text must be a non-empty string",
+            errors,
+        )
+        self.assertIn(
+            "illustration paths must stay inside the draft directory",
+            errors,
         )
 
     def test_rejects_wrong_slide_order_and_count(self):
@@ -314,7 +355,7 @@ class RenderTests(unittest.TestCase):
                 self.output_dir,
             )
 
-    def test_render_file_records_drafted_only_once(self):
+    def test_render_file_records_rendered_only_once(self):
         draft_path = self.work_dir / "draft.json"
         draft_path.write_text(
             json.dumps(self.valid_draft()),
@@ -331,6 +372,9 @@ class RenderTests(unittest.TestCase):
             encoding="utf-8",
         )
         history_path = self.work_dir / "history.jsonl"
+        draft = self.valid_draft()
+        record_content_state(draft, "content_drafted", history_path)
+        record_content_state(draft, "content_approved", history_path)
 
         for _ in range(2):
             render_file(
@@ -341,9 +385,11 @@ class RenderTests(unittest.TestCase):
             )
 
         events = read_events(history_path)
-        self.assertEqual(len(events), 1)
-        self.assertEqual(events[0]["event"], "drafted")
-        self.assertEqual(events[0]["draft_id"], "2026-07-30-fina-01")
+        self.assertEqual(
+            [event["event"] for event in events],
+            ["content_drafted", "content_approved", "rendered"],
+        )
+        self.assertEqual(events[-1]["draft_id"], "2026-07-30-fina-01")
 
 
 class PublicationStateTests(unittest.TestCase):
@@ -414,7 +460,7 @@ class PublicationStateTests(unittest.TestCase):
             assert_publishable("d1", read_events(self.history))
 
     def test_only_safe_states_can_start_publish(self):
-        for state in ("drafted", "approved", "publish_failed"):
+        for state in ("approved", "publish_failed"):
             history = self.root / f"{state}.jsonl"
             append_event(
                 history,
@@ -440,6 +486,93 @@ class PublicationStateTests(unittest.TestCase):
             {"draft_id": "d1", "event": "approved"},
         )
 
+    def test_content_must_be_approved_before_rendering(self):
+        draft = {
+            "draft_id": "d1",
+            "project_id": "fina",
+            "format_id": "what-happens-next",
+        }
+        record_content_state(draft, "content_drafted", self.history)
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "content approval required",
+        ):
+            assert_renderable("d1", read_events(self.history))
+
+        record_content_state(draft, "content_approved", self.history)
+        self.assertIsNone(
+            assert_renderable("d1", read_events(self.history))
+        )
+
+    def test_final_approval_requires_rendered_event(self):
+        draft = {
+            "draft_id": "d1",
+            "project_id": "fina",
+            "format_id": "what-happens-next",
+        }
+        record_content_state(draft, "content_drafted", self.history)
+        record_content_state(draft, "content_approved", self.history)
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "rendered carousel required",
+        ):
+            approve(draft, self.history)
+
+        mark_rendered(draft, self.history)
+        approve(draft, self.history)
+        approve(draft, self.history)
+        self.assertEqual(
+            [event["event"] for event in read_events(self.history)],
+            [
+                "content_drafted",
+                "content_approved",
+                "rendered",
+                "approved",
+            ],
+        )
+
+    def test_publishable_states_exclude_preapproval_events(self):
+        for state in (
+            "content_drafted",
+            "content_approved",
+            "rendered",
+        ):
+            history = self.root / f"{state}.jsonl"
+            append_event(
+                history,
+                {"draft_id": "d1", "event": state},
+            )
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "not publishable",
+            ):
+                assert_publishable("d1", read_events(history))
+
+    def test_revision_and_hold_accept_every_pending_approval_stage(self):
+        for state in (
+            "drafted",
+            "content_drafted",
+            "content_approved",
+            "rendered",
+            "approved",
+        ):
+            history = self.root / f"terminal-{state}.jsonl"
+            draft = {
+                "draft_id": f"d-{state}",
+                "project_id": "fina",
+                "format_id": "what-happens-next",
+            }
+            append_event(history, {**draft, "event": state})
+            record_terminal(draft, "revised", history)
+            self.assertEqual(
+                latest_event(draft["draft_id"], read_events(history))[
+                    "event"
+                ],
+                "revised",
+            )
+
     def test_approval_is_recorded_once_before_publication(self):
         draft = {
             "draft_id": "d1",
@@ -450,7 +583,7 @@ class PublicationStateTests(unittest.TestCase):
             self.history,
             {
                 **draft,
-                "event": "drafted",
+                "event": "rendered",
             },
         )
 
@@ -460,7 +593,7 @@ class PublicationStateTests(unittest.TestCase):
         events = read_events(self.history)
         self.assertEqual(
             [event["event"] for event in events],
-            ["drafted", "approved"],
+            ["rendered", "approved"],
         )
 
     def test_revision_and_hold_are_recorded_as_terminal_states(self):
@@ -643,7 +776,7 @@ class PublishFlowTests(unittest.TestCase):
                 "draft_id": "d1",
                 "project_id": "fina",
                 "format_id": "what-happens-next",
-                "event": "drafted",
+                "event": "rendered",
             },
         )
         self.r2 = FakeR2()
@@ -981,7 +1114,7 @@ class PublishFlowTests(unittest.TestCase):
                 "draft_id": draft["draft_id"],
                 "project_id": draft["project_id"],
                 "format_id": draft["format_id"],
-                "event": "drafted",
+                "event": "rendered",
             },
         )
 
