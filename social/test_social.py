@@ -6,10 +6,15 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from PIL import Image
+
 from social.render import (
     load_json,
     read_events,
     recent_published_formats,
+    render_draft,
+    render_file,
+    render_slide,
     validate_draft,
     validate_illustrations,
 )
@@ -199,6 +204,120 @@ class DraftValidationTests(unittest.TestCase):
         validate_draft(draft, self.project(), set())
 
         self.assertEqual(draft, before)
+
+
+class RenderTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.work_dir = Path(self.temp_dir.name)
+        self.output_dir = self.work_dir / "rendered"
+        for index, color in enumerate(
+            ("#D7E7D0", "#F0C9A8", "#C9D9EA"),
+            start=1,
+        ):
+            Image.new("RGB", (900, 700), color).save(
+                self.work_dir / f"art-{index:02}.png"
+            )
+
+    @staticmethod
+    def project():
+        project = DraftValidationTests.project()
+        project.update(
+            {
+                "logo": "assets/fina/logo.png",
+                "positioning": (
+                    "Forecast upcoming financial pressure before it "
+                    "becomes a problem."
+                ),
+                "palette": {
+                    "background": "#F5F1E8",
+                    "accent": "#7A8F72",
+                    "ink": "#242621",
+                },
+            }
+        )
+        return project
+
+    @staticmethod
+    def valid_draft():
+        return DraftValidationTests.valid_draft()
+
+    def test_render_outputs_numbered_1080_by_1350_jpegs(self):
+        outputs = render_draft(
+            self.valid_draft(),
+            self.project(),
+            self.work_dir,
+            self.output_dir,
+        )
+
+        self.assertEqual(
+            [path.name for path in outputs],
+            ["01.jpg", "02.jpg", "03.jpg", "04.jpg"],
+        )
+        for path in outputs:
+            with Image.open(path) as image:
+                self.assertEqual(image.size, (1080, 1350))
+                self.assertEqual(image.format, "JPEG")
+                self.assertEqual(dict(image.getexif()), {})
+
+    def test_cta_uses_logo_and_badge_without_illustration(self):
+        output = render_slide(
+            self.valid_draft()["slides"][-1],
+            self.project(),
+            4,
+            4,
+            self.work_dir,
+            self.output_dir / "04.jpg",
+        )
+
+        with Image.open(output) as image:
+            colors = image.resize((108, 135)).getcolors(maxcolors=20_000)
+        self.assertEqual(output.name, "04.jpg")
+        self.assertGreater(len(colors), 10)
+
+    def test_rejects_copy_that_cannot_fit_safe_area(self):
+        draft = self.valid_draft()
+        draft["slides"][1]["headline"] = "word " * 80
+
+        with self.assertRaisesRegex(ValueError, "text does not fit"):
+            render_draft(
+                draft,
+                self.project(),
+                self.work_dir,
+                self.output_dir,
+            )
+
+    def test_render_file_records_drafted_only_once(self):
+        draft_path = self.work_dir / "draft.json"
+        draft_path.write_text(
+            json.dumps(self.valid_draft()),
+            encoding="utf-8",
+        )
+        config_path = self.work_dir / "projects.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "formats": ["what-happens-next"],
+                    "projects": [self.project()],
+                }
+            ),
+            encoding="utf-8",
+        )
+        history_path = self.work_dir / "history.jsonl"
+
+        for _ in range(2):
+            render_file(
+                draft_path,
+                self.output_dir,
+                config_path=config_path,
+                history_path=history_path,
+            )
+
+        events = read_events(history_path)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["event"], "drafted")
+        self.assertEqual(events[0]["draft_id"], "2026-07-30-fina-01")
 
 
 if __name__ == "__main__":
