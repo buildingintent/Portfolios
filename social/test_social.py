@@ -41,6 +41,25 @@ from social.publish import (
 )
 
 
+def text_layout(headline_y=80, body_y=350):
+    return {
+        "headline": {
+            "box": [64, headline_y, 1016, headline_y + 230],
+            "font_size": 78,
+            "align": "left",
+            "color": "#171512",
+            "rotation": 0,
+        },
+        "body": {
+            "box": [64, body_y, 900, body_y + 180],
+            "font_size": 44,
+            "align": "left",
+            "color": "#171512",
+            "rotation": 0,
+        },
+    }
+
+
 def content_only_draft():
     draft = DraftValidationTests.valid_draft()
     draft.pop("art_direction", None)
@@ -82,12 +101,17 @@ class DraftValidationTests(unittest.TestCase):
                 "https://apps.apple.com/us/app/"
                 "fina-financial-companion/id6778169653"
             ),
+            "art_direction": (
+                "Hand-inked editorial illustration with warm paper texture"
+            ),
             "slides": [
                 {
                     "kind": "hook",
                     "headline": "Your balance looks fine.",
                     "body": "Next Tuesday might not.",
                     "illustration": "art-01.png",
+                    "scene": "A concise description of the unique visual composition",
+                    "text_layout": text_layout(),
                     "alt_text": "A person looking ahead at approaching bills.",
                 },
                 {
@@ -95,6 +119,8 @@ class DraftValidationTests(unittest.TestCase):
                     "headline": "Today",
                     "body": "Some of that balance is already spoken for.",
                     "illustration": "art-02.png",
+                    "scene": "A concise description of the unique visual composition",
+                    "text_layout": text_layout(),
                     "alt_text": "Envelopes beside a current balance.",
                 },
                 {
@@ -102,6 +128,8 @@ class DraftValidationTests(unittest.TestCase):
                     "headline": "Next Tuesday",
                     "body": "Two automatic payments arrive together.",
                     "illustration": "art-03.png",
+                    "scene": "A concise description of the unique visual composition",
+                    "text_layout": text_layout(),
                     "alt_text": "Two bills landing on one calendar date.",
                 },
                 {
@@ -196,6 +224,51 @@ class DraftValidationTests(unittest.TestCase):
             "illustration paths must stay inside the draft directory",
             validate_draft(draft, self.project(), set()),
         )
+
+    def test_rejects_text_regions_outside_canvas(self):
+        draft = self.valid_draft()
+        draft["slides"][0]["text_layout"]["headline"]["box"] = [
+            -1, 80, 800, 260,
+        ]
+
+        self.assertIn(
+            "text region must stay inside the canvas",
+            validate_draft(draft, self.project(), set()),
+        )
+
+    def test_rejects_overlapping_headline_and_body_regions(self):
+        draft = self.valid_draft()
+        draft["slides"][0]["text_layout"]["body"]["box"] = [
+            64, 100, 900, 260,
+        ]
+
+        self.assertIn(
+            "headline and body text regions must not overlap",
+            validate_draft(draft, self.project(), set()),
+        )
+
+    def test_rejects_unsupported_text_region_values(self):
+        draft = self.valid_draft()
+        region = draft["slides"][0]["text_layout"]["headline"]
+        region["align"] = "diagonal"
+        region["font_size"] = 200
+        region["color"] = "black"
+        region["rotation"] = 45
+
+        errors = validate_draft(draft, self.project(), set())
+        self.assertIn("text alignment is invalid", errors)
+        self.assertIn("text font size is invalid", errors)
+        self.assertIn("text color must be #RRGGBB", errors)
+        self.assertIn("text rotation must be between -12 and 12", errors)
+
+    def test_render_ready_draft_requires_art_direction_and_scene(self):
+        draft = self.valid_draft()
+        draft.pop("art_direction")
+        draft["slides"][0].pop("scene")
+
+        errors = validate_draft(draft, self.project(), set())
+        self.assertIn("art_direction must be a non-empty string", errors)
+        self.assertIn("slide 1 scene must be a non-empty string", errors)
 
     def test_rejects_draft_id_that_is_unsafe_for_staging(self):
         draft = self.valid_draft()
@@ -343,6 +416,53 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(output.name, "04.jpg")
         self.assertGreater(len(colors), 10)
 
+    def test_content_art_is_full_bleed(self):
+        slide = self.valid_draft()["slides"][0]
+        output = render_slide(
+            slide,
+            self.project(),
+            1,
+            4,
+            self.work_dir,
+            self.output_dir / "01.jpg",
+        )
+
+        with Image.open(output) as image:
+            for point in ((0, 0), (1079, 0), (0, 1349), (1079, 1349)):
+                pixel = image.getpixel(point)
+                self.assertLess(
+                    sum(
+                        abs(channel - expected)
+                        for channel, expected in zip(pixel, (215, 231, 208))
+                    ),
+                    30,
+                )
+
+    def test_text_moves_with_scene_layout(self):
+        first = self.valid_draft()["slides"][0]
+        second = copy.deepcopy(first)
+        second["text_layout"] = text_layout(headline_y=720, body_y=980)
+
+        first_path = render_slide(
+            first,
+            self.project(),
+            1,
+            4,
+            self.work_dir,
+            self.output_dir / "first.jpg",
+        )
+        second_path = render_slide(
+            second,
+            self.project(),
+            1,
+            4,
+            self.work_dir,
+            self.output_dir / "second.jpg",
+        )
+
+        with Image.open(first_path) as a, Image.open(second_path) as b:
+            self.assertNotEqual(a.tobytes(), b.tobytes())
+
     def test_rejects_copy_that_cannot_fit_safe_area(self):
         draft = self.valid_draft()
         draft["slides"][1]["headline"] = "word " * 80
@@ -355,7 +475,7 @@ class RenderTests(unittest.TestCase):
                 self.output_dir,
             )
 
-    def test_render_file_records_rendered_only_once(self):
+    def test_render_file_records_visual_plan_once(self):
         draft_path = self.work_dir / "draft.json"
         draft_path.write_text(
             json.dumps(self.valid_draft()),
@@ -390,6 +510,18 @@ class RenderTests(unittest.TestCase):
             ["content_drafted", "content_approved", "rendered"],
         )
         self.assertEqual(events[-1]["draft_id"], "2026-07-30-fina-01")
+        self.assertEqual(
+            events[-1].get("art_direction"),
+            "Hand-inked editorial illustration with warm paper texture",
+        )
+        self.assertEqual(
+            events[-1].get("scenes"),
+            [
+                "A concise description of the unique visual composition",
+                "A concise description of the unique visual composition",
+                "A concise description of the unique visual composition",
+            ],
+        )
 
     def test_render_file_rejects_content_changed_after_approval(self):
         draft_path = self.work_dir / "draft.json"
@@ -550,6 +682,11 @@ class PublicationStateTests(unittest.TestCase):
             "draft_id": "d1",
             "project_id": "fina",
             "format_id": "what-happens-next",
+            "art_direction": "Warm paper texture",
+            "slides": [
+                {"kind": "hook", "scene": "A person planning ahead"},
+                {"kind": "cta"},
+            ],
         }
         record_content_state(draft, "content_drafted", self.history)
         record_content_state(draft, "content_approved", self.history)

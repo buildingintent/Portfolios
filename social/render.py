@@ -163,7 +163,14 @@ def mark_rendered(draft: dict, history: Path) -> None:
         events,
         _content_fingerprint(draft),
     )
-    append_event(history, _draft_event(draft, "rendered"))
+    event = _draft_event(draft, "rendered")
+    event["art_direction"] = draft["art_direction"]
+    event["scenes"] = [
+        slide["scene"]
+        for slide in draft["slides"]
+        if slide["kind"] != "cta"
+    ]
+    append_event(history, event)
 
 
 def recent_published_formats(
@@ -321,6 +328,8 @@ def validate_draft(
     blocked_formats: set[str],
 ) -> list[str]:
     errors = validate_content(draft, project, blocked_formats)
+    if not _non_empty_string(draft.get("art_direction")):
+        errors.append("art_direction must be a non-empty string")
     for index, slide in enumerate(draft.get("slides", []), start=1):
         if not isinstance(slide, dict):
             continue
@@ -333,9 +342,77 @@ def validate_draft(
                 errors.append(
                     "illustration paths must stay inside the draft directory"
                 )
+            if not _non_empty_string(slide.get("scene")):
+                errors.append(
+                    f"slide {index} scene must be a non-empty string"
+                )
+            layout = slide.get("text_layout")
+            headline = layout.get("headline") if isinstance(layout, dict) else None
+            body = layout.get("body") if isinstance(layout, dict) else None
+            headline_errors = _text_region_errors(headline, 52, 104)
+            body_errors = _text_region_errors(body, 30, 60)
+            errors.extend(headline_errors)
+            errors.extend(body_errors)
+            if (
+                isinstance(headline, dict)
+                and isinstance(body, dict)
+                and "text region must stay inside the canvas"
+                not in headline_errors + body_errors
+                and _boxes_overlap(headline["box"], body["box"])
+            ):
+                errors.append(
+                    "headline and body text regions must not overlap"
+                )
         elif "illustration" in slide:
             errors.append("CTA slide must not include an illustration")
     return list(dict.fromkeys(errors))
+
+
+def _text_region_errors(
+    region: Any,
+    minimum_font: int,
+    maximum_font: int,
+) -> list[str]:
+    if not isinstance(region, dict):
+        return ["text region must be an object"]
+    errors = []
+    box = region.get("box")
+    if (
+        not isinstance(box, list)
+        or len(box) != 4
+        or any(type(value) is not int for value in box)
+        or not (
+            0 <= box[0] < box[2] <= CANVAS[0]
+            and 0 <= box[1] < box[3] <= CANVAS[1]
+        )
+    ):
+        errors.append("text region must stay inside the canvas")
+    font_size = region.get("font_size")
+    if (
+        type(font_size) is not int
+        or not minimum_font <= font_size <= maximum_font
+    ):
+        errors.append("text font size is invalid")
+    if region.get("align") not in {"left", "center", "right"}:
+        errors.append("text alignment is invalid")
+    if not (
+        isinstance(region.get("color"), str)
+        and re.fullmatch(r"#[0-9A-Fa-f]{6}", region["color"])
+    ):
+        errors.append("text color must be #RRGGBB")
+    rotation = region.get("rotation")
+    if type(rotation) is not int or not -12 <= rotation <= 12:
+        errors.append("text rotation must be between -12 and 12")
+    return errors
+
+
+def _boxes_overlap(first: list[int], second: list[int]) -> bool:
+    return not (
+        first[2] <= second[0]
+        or second[2] <= first[0]
+        or first[3] <= second[1]
+        or second[3] <= first[1]
+    )
 
 
 def validate_illustrations(draft: dict, draft_dir: Path) -> list[str]:
@@ -413,25 +490,65 @@ def _draw_lines(
     return y - spacing
 
 
-def _place_illustration(
-    canvas: Image.Image,
-    source: Path,
-    box: tuple[int, int, int, int],
-) -> None:
-    x1, y1, x2, y2 = box
+def _place_full_bleed(canvas: Image.Image, source: Path) -> None:
     with Image.open(source) as opened:
         image = ImageOps.fit(
             opened.convert("RGB"),
-            (x2 - x1, y2 - y1),
+            CANVAS,
             Image.Resampling.LANCZOS,
         )
-    mask = Image.new("L", image.size, 0)
-    ImageDraw.Draw(mask).rounded_rectangle(
-        (0, 0, image.width, image.height),
-        radius=44,
-        fill=255,
-    )
-    canvas.paste(image, (x1, y1), mask)
+    canvas.paste(image, (0, 0))
+
+
+def _draw_text_region(
+    canvas: Image.Image,
+    text: str,
+    region: dict,
+    bold: bool,
+) -> None:
+    x1, y1, x2, y2 = region["box"]
+    width = x2 - x1
+    height = y2 - y1
+    font = _font(region["font_size"], bold=bold)
+    spacing = max(4, round(region["font_size"] * 0.16))
+    probe = ImageDraw.Draw(canvas)
+    lines = wrap_text(probe, text, font, width)
+    if _text_height(probe, lines, font, spacing) > height:
+        raise ValueError("text does not fit text region")
+
+    layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    y = 0
+    for line in lines:
+        box = draw.textbbox((0, 0), line, font=font)
+        line_width = box[2] - box[0]
+        x = {
+            "left": 0,
+            "center": (width - line_width) // 2,
+            "right": width - line_width,
+        }[region["align"]]
+        draw.text((x, y), line, font=font, fill=region["color"])
+        y += box[3] - box[1] + spacing
+
+    rotation = region["rotation"]
+    if rotation:
+        layer = layer.rotate(
+            rotation,
+            resample=Image.Resampling.BICUBIC,
+            expand=True,
+        )
+        paste_x = x1 + (width - layer.width) // 2
+        paste_y = y1 + (height - layer.height) // 2
+        if (
+            paste_x < 0
+            or paste_y < 0
+            or paste_x + layer.width > CANVAS[0]
+            or paste_y + layer.height > CANVAS[1]
+        ):
+            raise ValueError("rotated text leaves the canvas")
+    else:
+        paste_x, paste_y = x1, y1
+    canvas.paste(layer, (paste_x, paste_y), layer)
 
 
 def _resized_asset(path: Path, width: int) -> Image.Image:
@@ -447,45 +564,19 @@ def _render_content(
     project: dict,
     work_dir: Path,
 ) -> None:
-    palette = project["palette"]
-    draw = ImageDraw.Draw(canvas)
-    _place_illustration(
+    _place_full_bleed(canvas, work_dir / slide["illustration"])
+    _draw_text_region(
         canvas,
-        work_dir / slide["illustration"],
-        (SAFE[0], 104, SAFE[2], 724),
-    )
-    headline_font = _font(76, bold=True)
-    body_font = _font(46)
-    max_width = SAFE[2] - SAFE[0]
-    headline = wrap_text(
-        draw,
         slide["headline"],
-        headline_font,
-        max_width,
+        slide["text_layout"]["headline"],
+        bold=True,
     )
-    if _text_height(draw, headline, headline_font, 8) > 196:
-        raise ValueError("text does not fit safe area")
-    next_y = _draw_lines(
-        draw,
-        headline,
-        (SAFE[0], 782),
-        headline_font,
-        palette["ink"],
-        8,
+    _draw_text_region(
+        canvas,
+        slide["body"],
+        slide["text_layout"]["body"],
+        bold=False,
     )
-    body = wrap_text(draw, slide["body"], body_font, max_width)
-    if _text_height(draw, body, body_font, 10) > 190:
-        raise ValueError("text does not fit safe area")
-    body_bottom = _draw_lines(
-        draw,
-        body,
-        (SAFE[0], next_y + 34),
-        body_font,
-        palette["ink"],
-        10,
-    )
-    if body_bottom > 1194:
-        raise ValueError("text does not fit safe area")
 
 
 def _render_cta(
@@ -550,25 +641,30 @@ def render_slide(
         CANVAS,
         ImageColor.getrgb(palette["background"]),
     )
-    draw = ImageDraw.Draw(canvas)
-    draw.rounded_rectangle(
-        (SAFE[0], 52, SAFE[0] + 112, 66),
-        radius=7,
-        fill=palette["accent"],
-    )
     if slide["kind"] == "cta":
         _render_cta(canvas, slide, project)
     else:
         _render_content(canvas, slide, project, work_dir)
 
+    draw = ImageDraw.Draw(canvas)
     number_font = _font(34, bold=True)
     number = f"{index}/{total}"
     number_box = draw.textbbox((0, 0), number, font=number_font)
+    pill = (
+        CANVAS[0] - 126,
+        CANVAS[1] - 84,
+        CANVAS[0] - 28,
+        CANVAS[1] - 28,
+    )
+    draw.rounded_rectangle(pill, radius=28, fill="#171512")
     draw.text(
-        (SAFE[2] - (number_box[2] - number_box[0]), 1230),
+        (
+            pill[0] + (pill[2] - pill[0] - number_box[2]) // 2,
+            pill[1] + 8,
+        ),
         number,
         font=number_font,
-        fill=palette["ink"],
+        fill="#FFFFFF",
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     canvas.save(
