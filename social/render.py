@@ -118,6 +118,19 @@ def validate_draft(
         if not _non_empty_string(draft.get(field)):
             errors.append(f"{field} must be a non-empty string")
 
+    draft_id = draft.get("draft_id")
+    if (
+        isinstance(draft_id, str)
+        and not re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9._-]*",
+            draft_id,
+        )
+    ):
+        errors.append(
+            "draft_id may contain only letters, numbers, dots, "
+            "dashes, and underscores"
+        )
+
     if draft.get("project_id") != project.get("id"):
         errors.append("project_id does not match the selected project")
 

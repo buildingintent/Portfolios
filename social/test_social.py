@@ -1,9 +1,13 @@
 import copy
 import json
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import parse_qs
 from zoneinfo import ZoneInfo
 
 from PIL import Image
@@ -19,9 +23,16 @@ from social.render import (
     validate_illustrations,
 )
 from social.publish import (
+    Instagram,
+    R2,
+    approve,
     append_event,
     assert_publishable,
+    cleanup_only,
     latest_event,
+    load_required_env,
+    publish,
+    verify_rendered,
 )
 
 
@@ -141,6 +152,15 @@ class DraftValidationTests(unittest.TestCase):
 
         self.assertIn(
             "illustration paths must stay inside the draft directory",
+            validate_draft(draft, self.project(), set()),
+        )
+
+    def test_rejects_draft_id_that_is_unsafe_for_staging(self):
+        draft = self.valid_draft()
+        draft["draft_id"] = "../fina"
+
+        self.assertIn(
+            "draft_id may contain only letters, numbers, dots, dashes, and underscores",
             validate_draft(draft, self.project(), set()),
         )
 
@@ -417,6 +437,538 @@ class PublicationStateTests(unittest.TestCase):
         self.assertEqual(
             latest_event("d1", events),
             {"draft_id": "d1", "event": "approved"},
+        )
+
+    def test_approval_is_recorded_once_before_publication(self):
+        draft = {
+            "draft_id": "d1",
+            "project_id": "fina",
+            "format_id": "what-happens-next",
+        }
+        append_event(
+            self.history,
+            {
+                **draft,
+                "event": "drafted",
+            },
+        )
+
+        approve(draft, self.history)
+        approve(draft, self.history)
+
+        events = read_events(self.history)
+        self.assertEqual(
+            [event["event"] for event in events],
+            ["drafted", "approved"],
+        )
+
+
+class FakeR2:
+    def __init__(self):
+        self.remaining_keys = []
+        self.fail_cleanup = False
+        self.cleanup_calls = 0
+
+    def upload(self, draft_id, files):
+        self.remaining_keys = [
+            f"{draft_id}/{path.name}" for path in files
+        ]
+        return list(self.remaining_keys)
+
+    @staticmethod
+    def presign(keys):
+        return [
+            f"https://staging.invalid/image-{index}.jpg"
+            for index, _key in enumerate(keys, start=1)
+        ]
+
+    def cleanup(self, draft_id):
+        self.cleanup_calls += 1
+        if self.fail_cleanup:
+            raise RuntimeError("cleanup failed")
+        prefix = f"{draft_id}/"
+        self.remaining_keys = [
+            key for key in self.remaining_keys
+            if not key.startswith(prefix)
+        ]
+
+
+class FakeInstagram:
+    def __init__(self):
+        self.fail_at = None
+        self.parent_calls = 0
+        self.publish_calls = 0
+
+    def create_child(self, image_url):
+        if self.fail_at == "child":
+            raise RuntimeError("child failed")
+        return f"child-{image_url.rsplit('-', 1)[-1]}"
+
+    @staticmethod
+    def wait_until_ready(container_id):
+        return None
+
+    def create_carousel(self, child_ids, caption):
+        self.parent_calls += 1
+        if self.fail_at == "parent":
+            raise RuntimeError("parent failed")
+        return "parent-1"
+
+    def publish_carousel(self, container_id):
+        self.publish_calls += 1
+        if self.fail_at == "publish":
+            raise RuntimeError("publish failed")
+        return "media-1"
+
+
+class FakeS3Client:
+    def __init__(self):
+        self.uploads = []
+        self.presigns = []
+        self.deleted = []
+        self.list_calls = 0
+
+    def upload_file(self, filename, bucket, key, ExtraArgs):
+        self.uploads.append((filename, bucket, key, ExtraArgs))
+
+    def generate_presigned_url(
+        self,
+        operation,
+        Params,
+        ExpiresIn,
+    ):
+        self.presigns.append((operation, Params, ExpiresIn))
+        return f"https://r2.invalid/{Params['Key']}"
+
+    def list_objects_v2(self, **kwargs):
+        self.list_calls += 1
+        if self.list_calls == 1:
+            return {
+                "Contents": [{"Key": "d1/01.jpg"}],
+                "IsTruncated": True,
+                "NextContinuationToken": "page-2",
+            }
+        if self.list_calls == 2:
+            self.assert_continuation(kwargs, "page-2")
+            return {
+                "Contents": [{"Key": "d1/02.jpg"}],
+                "IsTruncated": False,
+            }
+        return {"Contents": [], "IsTruncated": False}
+
+    @staticmethod
+    def assert_continuation(kwargs, expected):
+        if kwargs.get("ContinuationToken") != expected:
+            raise AssertionError("continuation token was not forwarded")
+
+    def delete_objects(self, Bucket, Delete):
+        self.deleted.extend(item["Key"] for item in Delete["Objects"])
+
+
+class FakeHTTPResponse:
+    def __init__(self, payload):
+        self.payload = (
+            payload
+            if isinstance(payload, bytes)
+            else json.dumps(payload).encode()
+        )
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        return False
+
+    def read(self):
+        return self.payload
+
+
+class PublishFlowTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.root = Path(self.temp_dir.name)
+        self.history = self.root / "history.jsonl"
+        self.files = [
+            self.root / "01.jpg",
+            self.root / "02.jpg",
+        ]
+        self.draft = {
+            "draft_id": "d1",
+            "project_id": "fina",
+            "format_id": "what-happens-next",
+            "caption": "Approved caption",
+        }
+        append_event(
+            self.history,
+            {
+                "draft_id": "d1",
+                "project_id": "fina",
+                "format_id": "what-happens-next",
+                "event": "drafted",
+            },
+        )
+        self.r2 = FakeR2()
+        self.instagram = FakeInstagram()
+
+    def test_success_publishes_once_and_cleans_prefix(self):
+        media_id = publish(
+            self.draft,
+            self.files,
+            self.r2,
+            self.instagram,
+            self.history,
+        )
+
+        self.assertEqual(media_id, "media-1")
+        self.assertEqual(self.instagram.publish_calls, 1)
+        self.assertEqual(self.r2.remaining_keys, [])
+        self.assertEqual(
+            latest_event("d1", read_events(self.history))["event"],
+            "published",
+        )
+
+    def test_child_failure_skips_parent_and_cleans_prefix(self):
+        self.instagram.fail_at = "child"
+
+        with self.assertRaisesRegex(RuntimeError, "child failed"):
+            publish(
+                self.draft,
+                self.files,
+                self.r2,
+                self.instagram,
+                self.history,
+            )
+
+        self.assertEqual(self.instagram.parent_calls, 0)
+        self.assertEqual(self.instagram.publish_calls, 0)
+        self.assertEqual(self.r2.remaining_keys, [])
+        self.assertEqual(
+            latest_event("d1", read_events(self.history))["event"],
+            "publish_failed",
+        )
+
+    def test_parent_failure_cleans_prefix(self):
+        self.instagram.fail_at = "parent"
+
+        with self.assertRaisesRegex(RuntimeError, "parent failed"):
+            publish(
+                self.draft,
+                self.files,
+                self.r2,
+                self.instagram,
+                self.history,
+            )
+
+        self.assertEqual(self.instagram.publish_calls, 0)
+        self.assertEqual(self.r2.remaining_keys, [])
+
+    def test_publish_failure_leaves_uncertain_state_and_cleans_prefix(self):
+        self.instagram.fail_at = "publish"
+
+        with self.assertRaisesRegex(RuntimeError, "publish failed"):
+            publish(
+                self.draft,
+                self.files,
+                self.r2,
+                self.instagram,
+                self.history,
+            )
+
+        self.assertEqual(
+            latest_event("d1", read_events(self.history))["event"],
+            "publishing",
+        )
+        self.assertEqual(self.r2.remaining_keys, [])
+
+    def test_cleanup_failure_is_recorded_after_success(self):
+        self.r2.fail_cleanup = True
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "published but staging cleanup failed",
+        ):
+            publish(
+                self.draft,
+                self.files,
+                self.r2,
+                self.instagram,
+                self.history,
+            )
+
+        events = read_events(self.history)
+        self.assertTrue(
+            any(event["event"] == "published" for event in events)
+        )
+        self.assertEqual(events[-1]["event"], "cleanup_failed")
+        self.assertEqual(events[-1]["resume_event"], "published")
+        self.assertEqual(self.instagram.publish_calls, 1)
+
+    def test_cleanup_only_never_calls_instagram(self):
+        self.r2.fail_cleanup = True
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "published but staging cleanup failed",
+        ):
+            publish(
+                self.draft,
+                self.files,
+                self.r2,
+                self.instagram,
+                self.history,
+            )
+        self.r2.fail_cleanup = False
+        prior_publish_calls = self.instagram.publish_calls
+
+        cleanup_only("d1", self.r2, self.history)
+
+        self.assertEqual(
+            self.instagram.publish_calls,
+            prior_publish_calls,
+        )
+        self.assertEqual(
+            latest_event("d1", read_events(self.history))["event"],
+            "cleanup_completed",
+        )
+
+    def test_cleanup_after_pre_publish_failure_allows_safe_retry(self):
+        self.instagram.fail_at = "child"
+        self.r2.fail_cleanup = True
+        with self.assertRaisesRegex(RuntimeError, "child failed"):
+            publish(
+                self.draft,
+                self.files,
+                self.r2,
+                self.instagram,
+                self.history,
+            )
+        self.r2.fail_cleanup = False
+
+        cleanup_only("d1", self.r2, self.history)
+
+        self.assertIsNone(
+            assert_publishable("d1", read_events(self.history))
+        )
+
+    def test_r2_uses_expiring_get_urls_and_cleans_every_page(self):
+        client = FakeS3Client()
+        r2 = R2(client, "portfolio-social-staging")
+
+        keys = r2.upload("d1", self.files)
+        urls = r2.presign(keys)
+        r2.cleanup("d1")
+
+        self.assertEqual(keys, ["d1/01.jpg", "d1/02.jpg"])
+        self.assertEqual(
+            client.uploads[0][3],
+            {
+                "ContentType": "image/jpeg",
+                "CacheControl": "no-store",
+            },
+        )
+        self.assertEqual(len(urls), 2)
+        self.assertTrue(
+            all(call[0] == "get_object" for call in client.presigns)
+        )
+        self.assertTrue(
+            all(call[2] == 3600 for call in client.presigns)
+        )
+        self.assertEqual(
+            client.deleted,
+            ["d1/01.jpg", "d1/02.jpg"],
+        )
+
+    def test_instagram_sends_expected_carousel_requests(self):
+        responses = iter(
+            [
+                {"id": "child-1"},
+                {"status_code": "IN_PROGRESS"},
+                {"status_code": "FINISHED"},
+                {"id": "parent-1"},
+                {"id": "media-1"},
+            ]
+        )
+        requests = []
+        sleeps = []
+
+        def open_url(request, timeout):
+            requests.append(request)
+            return FakeHTTPResponse(next(responses))
+
+        instagram = Instagram(
+            "user-1",
+            "secret-token",
+            "v23.0",
+            open_url=open_url,
+            sleep=sleeps.append,
+        )
+
+        child = instagram.create_child("https://r2.invalid/01.jpg")
+        instagram.wait_until_ready(child)
+        parent = instagram.create_carousel(
+            [child, "child-2"],
+            "Approved caption",
+        )
+        media = instagram.publish_carousel(parent)
+
+        child_form = parse_qs(requests[0].data.decode())
+        parent_form = parse_qs(requests[3].data.decode())
+        self.assertEqual(child_form["is_carousel_item"], ["true"])
+        self.assertEqual(
+            child_form["image_url"],
+            ["https://r2.invalid/01.jpg"],
+        )
+        self.assertEqual(parent_form["media_type"], ["CAROUSEL"])
+        self.assertEqual(
+            json.loads(parent_form["children"][0]),
+            ["child-1", "child-2"],
+        )
+        self.assertEqual(
+            requests[0].full_url,
+            "https://graph.instagram.com/v23.0/user-1/media",
+        )
+        self.assertEqual(
+            requests[1].full_url,
+            (
+                "https://graph.instagram.com/v23.0/"
+                "child-1?fields=status_code"
+            ),
+        )
+        self.assertEqual(
+            requests[0].headers["Authorization"],
+            "Bearer secret-token",
+        )
+        self.assertEqual(sleeps, [2])
+        self.assertEqual(media, "media-1")
+
+    def test_missing_credentials_are_rejected_before_network_access(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "IG_ACCESS_TOKEN.*R2_SECRET_ACCESS_KEY",
+        ):
+            load_required_env(
+                {"R2_BUCKET": "portfolio-social-staging"}
+            )
+
+        complete = {
+            "R2_ACCOUNT_ID": "account",
+            "R2_ACCESS_KEY_ID": "access",
+            "R2_SECRET_ACCESS_KEY": "secret",
+            "R2_BUCKET": "wrong-bucket",
+            "IG_USER_ID": "user",
+            "IG_ACCESS_TOKEN": "token",
+            "META_API_VERSION": "v23.0",
+        }
+        with self.assertRaisesRegex(
+            ValueError,
+            "R2_BUCKET must be portfolio-social-staging",
+        ):
+            load_required_env(complete)
+
+    def test_instagram_invalid_json_does_not_echo_response_body(self):
+        def open_url(request, timeout):
+            return FakeHTTPResponse(b"private-provider-body")
+
+        instagram = Instagram(
+            "user-1",
+            "secret-token",
+            "v23.0",
+            open_url=open_url,
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "^Instagram returned invalid JSON$",
+        ) as raised:
+            instagram.create_child("https://r2.invalid/01.jpg")
+        self.assertNotIn(
+            "private-provider-body",
+            str(raised.exception),
+        )
+
+    def test_rendered_files_require_exact_order_and_dimensions(self):
+        rendered = self.root / "rendered"
+        rendered.mkdir()
+        for filename in ("01.jpg", "02.jpg"):
+            Image.new("RGB", (1080, 1350), "white").save(
+                rendered / filename
+            )
+        draft = {"slides": [{}, {}]}
+
+        self.assertEqual(
+            [path.name for path in verify_rendered(draft, rendered)],
+            ["01.jpg", "02.jpg"],
+        )
+
+        Image.new("RGB", (100, 100), "white").save(
+            rendered / "02.jpg"
+        )
+        with self.assertRaisesRegex(
+            ValueError,
+            "02.jpg must be 1080x1350 JPEG",
+        ):
+            verify_rendered(draft, rendered)
+
+    def test_publish_script_runs_from_repository_root(self):
+        repository = Path(__file__).resolve().parent.parent
+        isolated_repository = self.root / "repository"
+        shutil.copytree(
+            repository / "social",
+            isolated_repository / "social",
+            ignore=shutil.ignore_patterns("__pycache__"),
+        )
+        draft_dir = isolated_repository / "draft"
+        rendered_dir = draft_dir / "rendered"
+        draft_dir.mkdir()
+        rendered_dir.mkdir()
+        draft = DraftValidationTests.valid_draft()
+        (draft_dir / "draft.json").write_text(
+            json.dumps(draft),
+            encoding="utf-8",
+        )
+        for index in range(1, 4):
+            Image.new("RGB", (900, 700), "white").save(
+                draft_dir / f"art-{index:02}.png"
+            )
+        for index in range(1, 5):
+            Image.new("RGB", (1080, 1350), "white").save(
+                rendered_dir / f"{index:02}.jpg"
+            )
+        append_event(
+            isolated_repository / "social" / "history.jsonl",
+            {
+                "draft_id": draft["draft_id"],
+                "project_id": draft["project_id"],
+                "format_id": draft["format_id"],
+                "event": "drafted",
+            },
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "social/publish.py",
+                "draft/draft.json",
+                "draft/rendered",
+            ],
+            cwd=isolated_repository,
+            env={},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn(
+            "missing required environment variables",
+            result.stdout,
+        )
+        self.assertNotIn("ModuleNotFoundError", result.stderr)
+        self.assertEqual(
+            read_events(
+                isolated_repository / "social" / "history.jsonl"
+            )[-1]["event"],
+            "approved",
         )
 
 
