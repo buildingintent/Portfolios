@@ -884,12 +884,13 @@ class PublishFlowTests(unittest.TestCase):
     def test_missing_credentials_are_rejected_before_network_access(self):
         with self.assertRaisesRegex(
             ValueError,
-            "INSTAGRAM_ACCESS_TOKEN.*R2_SECRET_ACCESS_KEY",
+            "INSTAGRAM_USER_ID.*R2_SECRET_ACCESS_KEY",
         ):
             load_required_env({})
 
     def test_current_secret_names_build_runtime_configuration(self):
         secrets = {
+            "INSTAGRAM_USER_ID": "ig-user",
             "R2_ACCOUNT_ID": "account",
             "R2_ACCESS_KEY_ID": "access",
             "R2_SECRET_ACCESS_KEY": "secret",
@@ -900,7 +901,6 @@ class PublishFlowTests(unittest.TestCase):
             load_required_env(secrets),
             {
                 **secrets,
-                "IG_USER_ID": "17841425833103994",
                 "META_API_VERSION": "v23.0",
                 "R2_BUCKET": "building-intent-social",
             },

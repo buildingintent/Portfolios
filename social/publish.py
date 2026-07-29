@@ -25,10 +25,10 @@ from social.render import (
 
 
 HISTORY_PATH = Path(__file__).resolve().parent / "history.jsonl"
-IG_USER_ID = "17841425833103994"
 META_API_VERSION = "v23.0"
 R2_BUCKET = "building-intent-social"
 REQUIRED_ENV = (
+    "INSTAGRAM_USER_ID",
     "INSTAGRAM_ACCESS_TOKEN",
     "R2_ACCOUNT_ID",
     "R2_ACCESS_KEY_ID",
@@ -80,7 +80,6 @@ def load_required_env(environ: dict[str, str]) -> dict[str, str]:
         )
     return {
         **{name: environ[name] for name in REQUIRED_ENV},
-        "IG_USER_ID": IG_USER_ID,
         "META_API_VERSION": META_API_VERSION,
         "R2_BUCKET": R2_BUCKET,
     }
@@ -502,7 +501,7 @@ def main() -> int:
         env = load_required_env(dict(os.environ))
         r2 = _r2(env)
         instagram = Instagram(
-            env["IG_USER_ID"],
+            env["INSTAGRAM_USER_ID"],
             env["INSTAGRAM_ACCESS_TOKEN"],
             env["META_API_VERSION"],
         )

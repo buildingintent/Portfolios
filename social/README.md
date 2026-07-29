@@ -76,15 +76,16 @@ References:
 Local secrets are read from the repository-root `.env`, which is ignored by
 Git and must have permission `600`. It contains:
 
+- `INSTAGRAM_USER_ID`
 - `INSTAGRAM_ACCESS_TOKEN`
 - `R2_ACCOUNT_ID`
 - `R2_ACCESS_KEY_ID`
 - `R2_SECRET_ACCESS_KEY`
 
-`R2_ACCESS_TOKEN` is not used by the publisher. The Instagram user ID, Meta API
-version, and `building-intent-social` bucket name are fixed public
-configuration. Never commit `.env`, paste secrets into a Codex chat, or print
-tokens and presigned URLs.
+`R2_ACCESS_TOKEN` is not used by the publisher. The Meta API version and
+`building-intent-social` bucket name are fixed public configuration. Never
+commit `.env`, paste secrets into a Codex chat, or print tokens and presigned
+URLs.
 
 ```bash
 chmod 600 .env
