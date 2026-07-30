@@ -7,17 +7,21 @@
 ## Goal
 
 Create one English Instagram carousel proposal every day at 8:00 AM
-America/Vancouver time. Codex first sends the exact slide-by-slide copy and
-caption to this Codex task. It generates the illustrations only after explicit
-content approval, sends the completed carousel for a second approval, and
-publishes through the Instagram API immediately after final approval.
+America/Vancouver time. The account tells relatable stories through one
+recurring fictional family. Some stories stand alone, while stories that
+naturally overlap an app problem connect to that app on the final slide.
+Codex first sends the exact slide-by-slide copy and caption to this Codex task.
+It generates the illustrations only after explicit content approval, sends the
+completed carousel for a second approval, and publishes through the Instagram
+API immediately after final approval.
 
 The system must be safe to keep in this public repository. No credential,
 access token, generated presigned URL, or unpublished draft is committed.
 
 ## Confirmed Product Decisions
 
-- Use one Instagram account and rotate active projects fairly.
+- Use one Instagram account for family-led stories and app-led educational
+  posts.
 - Start with one post per day. Additional daily slots can be added later.
 - Generate English content only.
 - Require two explicit approvals in this Codex task. `콘텐츠 승인` locks the
@@ -32,13 +36,46 @@ access token, generated presigned URL, or unpublished draft is committed.
   notes, signs, annotations, environmental type, split scenes, and other
   compositions invented for the content.
 - Do not depend on app UI screenshots.
-- Use the app logo, app name, official App Store badge, and a short CTA only on
-  the final slide.
-- Include the exact App Store URL in the caption. Do not mention a bio or
-  profile link.
-- Keep educational slides focused on recognizable audience problems. The app
-  appears only as the final bridge to a solution.
+- When a post promotes an app, use the app logo, app name, official App Store
+  badge, and a short CTA only on the final slide.
+- When a post promotes an app, include the exact App Store URL in the caption.
+  Do not mention a bio or profile link.
+- Let family stories stand alone when no app connection feels natural. Do not
+  add an app logo, App Store badge, product URL, or forced product mention.
+- Keep every slide before an app CTA focused on the story or recognizable
+  audience problem. The app appears only as the final bridge to a solution.
 - Do not reuse the same storytelling format within 14 days.
+
+## Editorial Direction
+
+The family is the account's point of view, not a separate content category
+that must remain free of promotion. Choose a worthwhile premise first, then
+decide whether an app belongs in its ending.
+
+Every proposal has one of three modes:
+
+1. `family_standalone`: a funny or relatable family episode with no product
+   connection. The final slide resolves the story or lands the punchline.
+2. `family_app_bridge`: a family episode whose problem clearly overlaps an
+   app's configured audience problem and capability. The final slide introduces
+   that app as a natural next step.
+3. `app_education`: an app-led educational carousel about a recognizable
+   problem. The app still appears only on the final slide.
+
+The initial soft mix is 60 percent family-led premises and 40 percent app-led
+premises. It is a preference, not a fixed calendar. A family-led premise may
+become either `family_standalone` or `family_app_bridge` after relevance is
+checked, so the actual promotional share may be higher than 40 percent. The
+weights remain easy to adjust as the account develops.
+
+An app bridge is allowed only when all of these are true:
+
+- The story already contains a problem listed in that app's public profile.
+- The app's real capability helps with the next step shown by the story.
+- The CTA follows naturally without rewriting earlier slides into an ad.
+
+Otherwise the post remains standalone. The planner never inserts an unrelated
+app merely to satisfy a promotional quota.
 
 ## Audience and Positioning
 
@@ -79,23 +116,28 @@ The system has four stages and no custom web UI or database.
 A Codex recurring automation wakes this task at 8:00 AM America/Vancouver.
 Codex:
 
-1. Reads the active project profiles and publication history.
-2. Chooses the least recently promoted eligible project.
-3. Selects a relatable problem, hook, storytelling format, and resulting slide
-   count.
-4. Writes the exact English headline and body for every numbered slide.
-5. Writes the matching Instagram caption.
-6. Sends only this content proposal to the task. No image is generated.
+1. Reads the family profile, active project profiles, editorial weights, and
+   publication history.
+2. Selects a family-led or app-led premise using the soft editorial mix and
+   recent history.
+3. For a family-led premise, checks whether it qualifies for a natural app
+   bridge. If several apps qualify, it chooses the least recently promoted one.
+   For an app-led premise, it starts with the least recently promoted eligible
+   app.
+4. Selects a hook, storytelling format, and resulting slide count.
+5. Writes the exact English headline and body for every numbered slide.
+6. Writes the matching Instagram caption.
+7. Sends only this content proposal to the task. No image is generated.
 
 The approval message uses this stable structure:
 
 ```text
-Project, topic, format, and total slide count
+Mode, app connection, topic, format, and total slide count
 Slide 1 — role
 Headline
 Body
 ...
-Final slide — App CTA
+Final slide — Resolution, punchline, or App CTA
 Headline
 Body
 Caption
@@ -144,9 +186,10 @@ public.
 ## Content Engine
 
 Slide count is an output of the chosen hook and format, not a fixed template.
-V1 uses 4–10 slides, including the hook and CTA.
+V1 uses 4–10 slides, including the hook and final resolution, punchline, or
+CTA.
 
-The initial library contains 16 storytelling formats:
+The initial library contains 18 storytelling formats:
 
 | Format | Typical length | Shape |
 | --- | ---: | --- |
@@ -166,6 +209,8 @@ The initial library contains 16 storytelling formats:
 | Contrarian breakdown | 5–8 | A defensible counterpoint, evidence, limit, and takeaway |
 | Mini case study | 5–9 | Clearly labeled hypothetical situation, decision, result |
 | Short action plan | 6–10 | A small sequence readers can follow over several days |
+| Family episode | 4–8 | Setup, family reaction, escalation, resolution or app bridge |
+| Family misunderstanding | 4–7 | Two viewpoints, reveal, shared realization, resolution |
 
 Selection rules:
 
@@ -174,7 +219,11 @@ Selection rules:
   least 14 days of eligible structures at the new posting frequency.
 - The planner compares the proposed hook, promise, and example with recent
   history and rejects a close repetition.
-- Every non-CTA slide must provide value without mentioning the product.
+- Every slide before an app CTA must work without mentioning the product.
+- Standalone family posts contain no app CTA, logo, App Store badge, product
+  URL, or app-specific hashtag.
+- Family bridge and app education posts contain exactly one app CTA on the
+  final slide and the exact App Store URL in the caption.
 - Claims must be supported by the slide content.
 - The caption must match the approved slides and may not introduce unsupported
   claims.
@@ -201,10 +250,11 @@ Every post shares one recognizable visual world:
 The story determines which family member narrates or appears; multiple family
 members may appear together. Projects do not receive separate mascots.
 
-Only the theme accent varies. It comes from the project's configured
-`palette.accent` and may highlight a few words or meaningful props. Say Better
-uses coral and Fina uses sage. The accent never changes the fixed background
-or recolors the family.
+Only the theme accent varies. Family bridge and app education posts use the
+connected project's configured `palette.accent`: coral for Say Better and sage
+for Fina. Standalone family posts use a restrained accent already present in
+the fixed family palette so they do not imply a product connection. The accent
+never changes the fixed background or recolors the family.
 
 Canonical references live at:
 
@@ -258,8 +308,9 @@ Brand palettes start from the approved logos:
 - Fina: fixed warm ivory, sage theme accent, and charcoal.
 - Say Better: fixed warm ivory, coral theme accent, and charcoal.
 
-The final CTA slide contains no app screenshot. It uses the approved app logo,
-app name, official App Store badge, and one positioning sentence.
+When present, the final CTA slide contains no app screenshot. It uses the
+approved app logo, app name, official App Store badge, and one positioning
+sentence.
 
 Approved logo sources:
 
@@ -276,8 +327,9 @@ does not read the private repositories at runtime.
 The implementation should remain small:
 
 - `social/README.md` — setup and operating instructions.
-- `social/projects.json` — public project profiles, schedule slots, logo paths,
-  positioning, audience problems, and App Store URLs.
+- `social/projects.json` — public family profile, editorial weights, project
+  profiles, schedule slots, logo paths, positioning, audience problems, and
+  App Store URLs.
 - `social/PROMPT.md` — content and image-generation rules used by Codex.
 - `social/render.py` — deterministic Pillow composition and validation.
 - `social/publish.py` — R2 staging, Instagram publication, cleanup, and history.
