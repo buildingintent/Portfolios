@@ -40,11 +40,17 @@ REQUIRED_ENV = (
     "R2_ACCOUNT_ID",
     "R2_ACCESS_KEY_ID",
     "R2_SECRET_ACCESS_KEY",
+    "INSTAGRAM_WEBHOOK_ADMIN_URL",
+    "INSTAGRAM_WEBHOOK_ADMIN_TOKEN",
 )
 R2_REQUIRED_ENV = (
     "R2_ACCOUNT_ID",
     "R2_ACCESS_KEY_ID",
     "R2_SECRET_ACCESS_KEY",
+)
+REGISTRY_REQUIRED_ENV = (
+    "INSTAGRAM_WEBHOOK_ADMIN_URL",
+    "INSTAGRAM_WEBHOOK_ADMIN_TOKEN",
 )
 
 
@@ -85,10 +91,23 @@ def load_required_env(environ: dict[str, str]) -> dict[str, str]:
         )
     return {
         **load_r2_env(environ),
+        **load_registry_env(environ),
         "INSTAGRAM_USER_ID": environ["INSTAGRAM_USER_ID"],
         "INSTAGRAM_ACCESS_TOKEN": environ["INSTAGRAM_ACCESS_TOKEN"],
         "META_API_VERSION": META_API_VERSION,
     }
+
+
+def load_registry_env(environ: dict[str, str]) -> dict[str, str]:
+    missing = [
+        name for name in REGISTRY_REQUIRED_ENV if not environ.get(name)
+    ]
+    if missing:
+        raise ValueError(
+            "missing required environment variables: "
+            + ", ".join(missing)
+        )
+    return {name: environ[name] for name in REGISTRY_REQUIRED_ENV}
 
 
 def load_r2_env(environ: dict[str, str]) -> dict[str, str]:
@@ -312,6 +331,48 @@ class Instagram:
         )
 
 
+class RuleRegistry:
+    def __init__(
+        self,
+        url: str,
+        token: str,
+        open_url=urlopen,
+    ):
+        self.url = url
+        self.token = token
+        self.open_url = open_url
+
+    def register(self, media_id: str, rule: dict) -> None:
+        payload = json.dumps(
+            {"media_id": media_id, **rule},
+            separators=(",", ":"),
+        ).encode()
+        request = Request(
+            self.url,
+            data=payload,
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {self.token}",
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with self.open_url(request, timeout=30) as response:
+                result = json.loads(response.read())
+        except (
+            HTTPError,
+            URLError,
+            OSError,
+            json.JSONDecodeError,
+            UnicodeDecodeError,
+        ):
+            raise RuntimeError(
+                "comment rule registration failed"
+            ) from None
+        if not isinstance(result, dict) or result.get("success") is not True:
+            raise RuntimeError("comment rule registration failed")
+
+
 def _event(draft: dict, event: str, **details) -> dict:
     return {
         "draft_id": draft["draft_id"],
@@ -467,6 +528,7 @@ def publish(
     instagram,
     history: Path,
     public_history: Path | None = None,
+    rule_registry=None,
 ) -> str:
     with draft_lock(history, draft["draft_id"]):
         return _publish_locked(
@@ -476,6 +538,7 @@ def publish(
             instagram,
             history,
             public_history,
+            rule_registry,
         )
 
 
@@ -486,6 +549,7 @@ def _publish_locked(
     instagram,
     history: Path,
     public_history: Path | None,
+    rule_registry,
 ) -> str:
     if public_history is not None and any(
         event.get("draft_id") == draft["draft_id"]
@@ -545,13 +609,45 @@ def _publish_locked(
                     instagram_media_id=media_id,
                 ),
             )
+        comment_rule = draft.get("comment_rule")
+        if isinstance(comment_rule, dict):
+            if rule_registry is None:
+                raise RuntimeError("comment rule registry required")
+            try:
+                rule_registry.register(media_id, comment_rule)
+            except Exception:
+                append_event(
+                    history,
+                    _event(
+                        draft,
+                        "rule_registration_failed",
+                        instagram_media_id=media_id,
+                    ),
+                )
+                raise RuntimeError(
+                    "published but comment rule registration failed; "
+                    "run --register-rule-only with the approved draft"
+                ) from None
+            append_event(
+                history,
+                _event(
+                    draft,
+                    "comment_rule_registered",
+                    instagram_media_id=media_id,
+                ),
+            )
     except Exception as error:
         original_error = error
         state = latest_event(
             draft["draft_id"],
             read_events(history),
         ).get("event")
-        if state not in {"publishing", "published"}:
+        if state not in {
+            "publishing",
+            "published",
+            "rule_registration_failed",
+            "comment_rule_registered",
+        }:
             append_event(history, _event(draft, "publish_failed"))
     finally:
         if cleanup_needed:
@@ -594,6 +690,53 @@ def _publish_locked(
             "Instagram publish returned no media ID"
         )
     return media_id
+
+
+def register_rule_only(
+    draft: dict,
+    rule_registry,
+    history: Path,
+) -> None:
+    with draft_lock(history, draft["draft_id"]):
+        events = read_events(history)
+        assert_approved_content(
+            draft["draft_id"],
+            events,
+            content_fingerprint(draft),
+        )
+        published = _latest_event_named(
+            draft["draft_id"],
+            events,
+            "published",
+        )
+        if published is None:
+            raise RuntimeError("published media ID required")
+        media_id = published.get("instagram_media_id")
+        if not isinstance(media_id, str) or not media_id:
+            raise RuntimeError("published media ID required")
+        registered = _latest_event_named(
+            draft["draft_id"],
+            events,
+            "comment_rule_registered",
+        )
+        if (
+            registered is not None
+            and registered.get("instagram_media_id") == media_id
+        ):
+            return
+        rule = draft.get("comment_rule")
+        if not isinstance(rule, dict):
+            raise RuntimeError("approved comment rule required")
+        rule_registry.register(media_id, rule)
+        append_event(
+            history,
+            _event(
+                draft,
+                "comment_rule_registered",
+                instagram_media_id=media_id,
+                content_fingerprint=content_fingerprint(draft),
+            ),
+        )
 
 
 def cleanup_only(draft_id: str, r2, history: Path) -> None:
@@ -647,17 +790,51 @@ def _r2(env: dict[str, str]) -> R2:
     return R2(make_r2_client(env), env["R2_BUCKET"])
 
 
+def _rule_registry(env: dict[str, str]) -> RuleRegistry:
+    return RuleRegistry(
+        env["INSTAGRAM_WEBHOOK_ADMIN_URL"],
+        env["INSTAGRAM_WEBHOOK_ADMIN_TOKEN"],
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("draft", nargs="?", type=Path)
     parser.add_argument("rendered", nargs="?", type=Path)
     parser.add_argument("--cleanup-only", metavar="DRAFT_ID")
     parser.add_argument(
+        "--register-rule-only",
+        metavar="DRAFT_JSON",
+        type=Path,
+    )
+    parser.add_argument(
         "--record-state",
         choices=("revised", "held", "image-revised"),
     )
     args = parser.parse_args()
     try:
+        if args.register_rule_only:
+            if (
+                args.draft is not None
+                or args.rendered is not None
+                or args.cleanup_only
+                or args.record_state
+            ):
+                raise ValueError(
+                    "--register-rule-only cannot be combined with "
+                    "another operation"
+                )
+            draft = load_json(args.register_rule_only)
+            registry_env = load_registry_env(dict(os.environ))
+            register_rule_only(
+                draft,
+                _rule_registry(registry_env),
+                HISTORY_PATH,
+            )
+            print(
+                f"registered comment rule for {draft['draft_id']}"
+            )
+            return 0
         if args.record_state:
             if args.draft is None or args.rendered is not None:
                 raise ValueError(
@@ -710,6 +887,7 @@ def main() -> int:
                 instagram,
                 HISTORY_PATH,
                 PUBLIC_HISTORY_PATH,
+                _rule_registry(env),
             )
         print(f"published Instagram media {media_id}; R2 prefix empty")
         return 0

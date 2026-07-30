@@ -40,6 +40,7 @@ from social.render import (
 from social.publish import (
     Instagram,
     R2,
+    RuleRegistry,
     approve,
     append_event,
     assert_publishable,
@@ -49,6 +50,7 @@ from social.publish import (
     load_required_env,
     main as publish_main,
     publish,
+    register_rule_only,
     record_image_revision,
     record_terminal,
     verify_rendered,
@@ -1367,6 +1369,17 @@ class FakeInstagram:
         return "media-1"
 
 
+class FakeRuleRegistry:
+    def __init__(self, fail=False):
+        self.fail = fail
+        self.registrations = []
+
+    def register(self, media_id, rule):
+        self.registrations.append((media_id, copy.deepcopy(rule)))
+        if self.fail:
+            raise RuntimeError("rule registration failed")
+
+
 class FakeS3Client:
     def __init__(self):
         self.uploads = []
@@ -1476,6 +1489,55 @@ class PublishFlowTests(unittest.TestCase):
         self.r2 = FakeR2()
         self.instagram = FakeInstagram()
 
+    def add_comment_rule(self):
+        self.draft["comment_rule"] = {
+            "keyword": "FORECAST",
+            "promise": "A simple checklist for looking ahead.",
+            "reply": (
+                "Here is a simple checklist.\n\nFina can help:\n"
+                "https://apps.apple.com/us/app/"
+                "fina-financial-companion/id6778169653"
+            ),
+        }
+        self.history.unlink(missing_ok=True)
+        fingerprint = content_fingerprint(self.draft)
+        for event in ("content_drafted", "content_approved"):
+            append_event(
+                self.history,
+                {
+                    "draft_id": "d1",
+                    "project_id": "fina",
+                    "format_id": "what-happens-next",
+                    "event": event,
+                    "content_fingerprint": fingerprint,
+                },
+            )
+        append_event(
+            self.history,
+            {
+                "draft_id": "d1",
+                "project_id": "fina",
+                "format_id": "what-happens-next",
+                "event": "rendered",
+                "draft_fingerprint": hashlib.sha256(
+                    json.dumps(
+                        self.draft,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                ).hexdigest(),
+                "rendered_files": [
+                    {
+                        "name": path.name,
+                        "sha256": hashlib.sha256(
+                            path.read_bytes()
+                        ).hexdigest(),
+                    }
+                    for path in self.files
+                ],
+            },
+        )
+
     def test_prompt_requires_content_approval_before_image_generation(self):
         prompt = (
             Path(__file__).with_name("PROMPT.md")
@@ -1561,6 +1623,117 @@ class PublishFlowTests(unittest.TestCase):
             },
         )
 
+    def test_success_registers_exact_approved_rule_after_publish(self):
+        self.add_comment_rule()
+        registry = FakeRuleRegistry()
+
+        media_id = publish(
+            self.draft,
+            self.files,
+            self.r2,
+            self.instagram,
+            self.history,
+            public_history=self.public_history,
+            rule_registry=registry,
+        )
+
+        self.assertEqual(
+            registry.registrations,
+            [("media-1", self.draft["comment_rule"])],
+        )
+        self.assertEqual(media_id, "media-1")
+        self.assertEqual(
+            latest_event("d1", read_events(self.history))["event"],
+            "comment_rule_registered",
+        )
+
+    def test_rule_registration_failure_does_not_republish(self):
+        self.add_comment_rule()
+        registry = FakeRuleRegistry(fail=True)
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "published but comment rule registration failed",
+        ):
+            publish(
+                self.draft,
+                self.files,
+                self.r2,
+                self.instagram,
+                self.history,
+                public_history=self.public_history,
+                rule_registry=registry,
+            )
+
+        self.assertEqual(self.instagram.publish_calls, 1)
+        self.assertEqual(
+            latest_event("d1", read_events(self.history))["event"],
+            "rule_registration_failed",
+        )
+        retry_registry = FakeRuleRegistry()
+        register_rule_only(
+            self.draft,
+            retry_registry,
+            self.history,
+        )
+        self.assertEqual(self.instagram.publish_calls, 1)
+        self.assertEqual(
+            retry_registry.registrations,
+            [("media-1", self.draft["comment_rule"])],
+        )
+        self.assertEqual(
+            latest_event("d1", read_events(self.history))["event"],
+            "comment_rule_registered",
+        )
+
+    def test_rule_registry_sends_json_without_echoing_provider_body(self):
+        requests = []
+
+        def open_url(request, timeout):
+            requests.append((request, timeout))
+            return FakeHTTPResponse({"success": True})
+
+        registry = RuleRegistry(
+            "https://worker.example/admin/rules",
+            "admin-token",
+            open_url=open_url,
+        )
+        rule = {
+            "keyword": "FORECAST",
+            "promise": "A checklist.",
+            "reply": f"Here it is.\n{DraftValidationTests.project()['app_store_url']}",
+        }
+
+        registry.register("18000000000000001", rule)
+
+        request, timeout = requests[0]
+        self.assertEqual(timeout, 30)
+        self.assertEqual(
+            request.full_url,
+            "https://worker.example/admin/rules",
+        )
+        self.assertEqual(
+            request.headers["Authorization"],
+            "Bearer admin-token",
+        )
+        self.assertEqual(
+            json.loads(request.data),
+            {"media_id": "18000000000000001", **rule},
+        )
+
+        failing = RuleRegistry(
+            "https://worker.example/admin/rules",
+            "admin-token",
+            open_url=lambda request, timeout: FakeHTTPResponse(
+                b"private-provider-body"
+            ),
+        )
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "^comment rule registration failed$",
+        ):
+            failing.register("18000000000000001", rule)
+
     def test_publish_cli_holds_lock_before_building_clients(self):
         draft_path = self.root / "draft.json"
         rendered_dir = self.root / "rendered"
@@ -1600,6 +1773,10 @@ class PublishFlowTests(unittest.TestCase):
                 },
             ),
             patch("social.publish._r2", side_effect=r2_while_locked),
+            patch(
+                "social.publish._rule_registry",
+                return_value=FakeRuleRegistry(),
+            ),
             patch(
                 "social.publish.Instagram",
                 return_value=self.instagram,
@@ -2041,6 +2218,10 @@ class PublishFlowTests(unittest.TestCase):
             "R2_ACCESS_KEY_ID": "access",
             "R2_SECRET_ACCESS_KEY": "secret",
             "INSTAGRAM_ACCESS_TOKEN": "token",
+            "INSTAGRAM_WEBHOOK_ADMIN_URL": (
+                "https://worker.example/admin/rules"
+            ),
+            "INSTAGRAM_WEBHOOK_ADMIN_TOKEN": "admin-token",
         }
 
         self.assertEqual(
