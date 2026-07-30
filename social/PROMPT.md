@@ -30,6 +30,14 @@ and `short-action-plan`.
 - English only. Make the hook specific, credible, and understandable without
   the caption. Keep every non-CTA slide useful without mentioning the app;
   mention it only on the CTA.
+- Run the installed `humanizer` skill in embedded mode on every headline,
+  body, caption, and hashtag before presenting it. Read the result aloud,
+  prefer plain words people naturally use, vary sentence rhythm, keep concrete
+  details, and remove corporate jargon, filler, generic motivational
+  language, and formulaic AI phrasing.
+- Do not use hyphens, en dashes, or em dashes in written copy or text shown
+  inside an image. Rewrite the sentence with natural punctuation instead.
+  Exact required URLs are the only exception.
 - The CTA contains the configured logo, app name, one positioning sentence,
   and the official App Store badge—never an app screenshot.
 - The caption accurately summarizes the slides, includes `link in bio`, and

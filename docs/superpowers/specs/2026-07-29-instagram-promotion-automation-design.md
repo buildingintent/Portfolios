@@ -53,6 +53,12 @@ Primary users:
 Content should focus on cross-language clarity, tone, confidence, concise
 mobile writing, and professional communication.
 
+All public copy must receive a humanization pass before review. It should read
+naturally aloud, use plain and specific language, and avoid corporate jargon,
+filler, generic motivational phrasing, and formulaic AI patterns. Headlines,
+slide text, captions, and hashtags must not use hyphens, en dashes, or em
+dashes. Exact required URLs are the only exception.
+
 ### Fina
 
 Primary users struggle with overspending, inconsistent budgets, subscriptions,
