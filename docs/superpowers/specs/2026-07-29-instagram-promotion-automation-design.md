@@ -34,7 +34,8 @@ access token, generated presigned URL, or unpublished draft is committed.
 - Do not depend on app UI screenshots.
 - Use the app logo, app name, official App Store badge, and a short CTA only on
   the final slide.
-- Include the App Store URL in the caption and mention the profile link.
+- Include the exact App Store URL in the caption. Do not mention a bio or
+  profile link.
 - Keep educational slides focused on recognizable audience problems. The app
   appears only as the final bridge to a solution.
 - Do not reuse the same storytelling format within 14 days.

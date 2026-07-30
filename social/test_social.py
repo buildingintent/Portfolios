@@ -112,8 +112,7 @@ class DraftValidationTests(unittest.TestCase):
             "format_id": "what-happens-next",
             "hook": "Your balance looks fine. Next Tuesday might not.",
             "caption": (
-                "A balance is a snapshot. Find Fina through the link in bio "
-                "or on the App Store: "
+                "A balance is a snapshot. Find Fina on the App Store: "
                 "https://apps.apple.com/us/app/"
                 "fina-financial-companion/id6778169653"
             ),
@@ -229,7 +228,7 @@ class DraftValidationTests(unittest.TestCase):
             errors,
         )
 
-    def test_requires_exact_app_store_url_and_profile_link_in_caption(self):
+    def test_requires_exact_app_store_url_in_caption(self):
         draft = self.valid_draft()
         draft["caption"] = "Read the carousel."
 
@@ -239,7 +238,19 @@ class DraftValidationTests(unittest.TestCase):
             "caption must contain the project's App Store URL",
             errors,
         )
-        self.assertIn("caption must mention link in bio", errors)
+
+    def test_accepts_caption_without_profile_link(self):
+        draft = self.valid_draft()
+        draft["caption"] = (
+            "Find Fina on the App Store: "
+            "https://apps.apple.com/us/app/"
+            "fina-financial-companion/id6778169653"
+        )
+
+        self.assertEqual(
+            validate_draft(draft, self.project(), set()),
+            [],
+        )
 
     def test_rejects_unsafe_illustration_path(self):
         draft = self.valid_draft()
@@ -1503,6 +1514,67 @@ class PublishFlowTests(unittest.TestCase):
                 "instagram_media_id": "media-1",
             },
         )
+
+    def test_publish_cli_holds_lock_before_building_clients(self):
+        draft_path = self.root / "draft.json"
+        rendered_dir = self.root / "rendered"
+        rendered_dir.mkdir()
+        draft_path.write_text(
+            json.dumps(self.draft),
+            encoding="utf-8",
+        )
+        output = io.StringIO()
+
+        def r2_while_locked(env):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "draft operation already in progress",
+            ):
+                with draft_lock(self.history, self.draft["draft_id"]):
+                    pass
+            return self.r2
+
+        with (
+            patch("social.publish.HISTORY_PATH", self.history),
+            patch(
+                "social.publish.PUBLIC_HISTORY_PATH",
+                self.public_history,
+            ),
+            patch("social.publish.validate_file", return_value=[]),
+            patch(
+                "social.publish.verify_rendered",
+                return_value=self.files,
+            ),
+            patch(
+                "social.publish.load_required_env",
+                return_value={
+                    "INSTAGRAM_USER_ID": "ig-user",
+                    "INSTAGRAM_ACCESS_TOKEN": "token",
+                    "META_API_VERSION": "v23.0",
+                },
+            ),
+            patch("social.publish._r2", side_effect=r2_while_locked),
+            patch(
+                "social.publish.Instagram",
+                return_value=self.instagram,
+            ),
+            patch(
+                "social.publish._publish_locked",
+                return_value="media-1",
+            ),
+            patch(
+                "sys.argv",
+                [
+                    "publish.py",
+                    str(draft_path),
+                    str(rendered_dir),
+                ],
+            ),
+            redirect_stdout(output),
+        ):
+            self.assertEqual(publish_main(), 0)
+
+        self.assertIn("published Instagram media media-1", output.getvalue())
 
     def test_public_ledger_blocks_republish_with_recreated_local_state(self):
         append_event(

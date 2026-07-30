@@ -685,26 +685,32 @@ def main() -> int:
             return 0
         if args.draft is None or args.rendered is None:
             raise ValueError("draft and rendered directory are required")
-        errors = validate_file(args.draft)
-        if errors:
-            raise ValueError("\n".join(errors))
-        draft = load_json(args.draft)
-        files = verify_rendered(draft, args.rendered)
-        env = load_required_env(dict(os.environ))
-        r2 = _r2(env)
-        instagram = Instagram(
-            env["INSTAGRAM_USER_ID"],
-            env["INSTAGRAM_ACCESS_TOKEN"],
-            env["META_API_VERSION"],
-        )
-        media_id = publish(
-            draft,
-            files,
-            r2,
-            instagram,
-            HISTORY_PATH,
-            public_history=PUBLIC_HISTORY_PATH,
-        )
+        draft_id = load_json(args.draft).get("draft_id")
+        if not isinstance(draft_id, str):
+            raise ValueError("draft_id must be a string")
+        with draft_lock(HISTORY_PATH, draft_id):
+            errors = validate_file(args.draft)
+            if errors:
+                raise ValueError("\n".join(errors))
+            draft = load_json(args.draft)
+            if draft.get("draft_id") != draft_id:
+                raise RuntimeError("draft changed while acquiring lock")
+            files = verify_rendered(draft, args.rendered)
+            env = load_required_env(dict(os.environ))
+            r2 = _r2(env)
+            instagram = Instagram(
+                env["INSTAGRAM_USER_ID"],
+                env["INSTAGRAM_ACCESS_TOKEN"],
+                env["META_API_VERSION"],
+            )
+            media_id = _publish_locked(
+                draft,
+                files,
+                r2,
+                instagram,
+                HISTORY_PATH,
+                PUBLIC_HISTORY_PATH,
+            )
         print(f"published Instagram media {media_id}; R2 prefix empty")
         return 0
     except (OSError, ValueError, RuntimeError) as error:

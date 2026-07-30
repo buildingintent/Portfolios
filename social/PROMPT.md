@@ -40,9 +40,9 @@ and `short-action-plan`.
   Exact required URLs are the only exception.
 - The CTA contains the configured logo, app name, one positioning sentence,
   and the official App Store badge—never an app screenshot.
-- The caption accurately summarizes the slides, includes `link in bio`, and
-  contains the project's exact App Store URL. End with 5–8 specific,
-  relevant English hashtags; avoid generic reach-bait tags.
+- The caption accurately summarizes the slides and contains the project's
+  exact App Store URL. Do not mention a bio or profile link. End with 5–8
+  specific, relevant English hashtags; avoid generic reach-bait tags.
 - Write a meaningful plan for every slide. For Fina, do not promise outcomes
   or present education as personalized financial, investment, tax, legal, or
   credit advice.
@@ -58,7 +58,7 @@ each slide has only `kind`, `headline`, and `body`; omit `illustration`,
   "project_id": "fina",
   "format_id": "what-happens-next",
   "hook": "Your balance looks fine. Next Tuesday might not.",
-  "caption": "A balance is a snapshot. Find Fina through the link in bio or on the App Store: https://apps.apple.com/us/app/fina-financial-companion/id6778169653",
+  "caption": "A balance is a snapshot. Find Fina on the App Store: https://apps.apple.com/us/app/fina-financial-companion/id6778169653",
   "slides": [
     {"kind": "hook", "headline": "Your balance looks fine.", "body": "Next Tuesday might not."},
     {"kind": "content", "headline": "Today", "body": "Some of that balance is already spoken for."},
@@ -154,7 +154,7 @@ that scene-specific region, not a fixed carousel template.
   "project_id": "fina",
   "format_id": "what-happens-next",
   "hook": "Your balance looks fine. Next Tuesday might not.",
-  "caption": "A balance is a snapshot. Find Fina through the link in bio or on the App Store: https://apps.apple.com/us/app/fina-financial-companion/id6778169653",
+  "caption": "A balance is a snapshot. Find Fina on the App Store: https://apps.apple.com/us/app/fina-financial-companion/id6778169653",
   "art_direction": "Hand-inked editorial scenes on warm paper with sage accents",
   "slides": [
     {

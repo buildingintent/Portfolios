@@ -339,8 +339,6 @@ def validate_content(
             errors.append(
                 "caption must contain the project's App Store URL"
             )
-        if "link in bio" not in caption.casefold():
-            errors.append("caption must mention link in bio")
         if len(caption) > 2200:
             errors.append("caption must be at most 2200 characters")
 
