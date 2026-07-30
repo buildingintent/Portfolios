@@ -1,0 +1,16 @@
+CREATE TABLE IF NOT EXISTS rules (
+  media_id TEXT PRIMARY KEY,
+  keyword TEXT NOT NULL,
+  promise TEXT NOT NULL,
+  reply TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS deliveries (
+  comment_id TEXT PRIMARY KEY,
+  media_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  message_id TEXT,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

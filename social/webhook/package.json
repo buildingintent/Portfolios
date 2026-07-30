@@ -1,0 +1,11 @@
+{
+  "name": "building-intent-instagram-webhook",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test worker.test.js"
+  },
+  "devDependencies": {
+    "wrangler": "4.115.0"
+  }
+}
