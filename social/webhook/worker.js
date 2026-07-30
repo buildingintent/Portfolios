@@ -31,16 +31,15 @@ function privacyResponse() {
   <main>
     <h1>Privacy Policy</h1>
     <p class="date">Effective date: July 30, 2026</p>
-    <p>Building Intent Social Publish helps manage Instagram posts and respond
-    when people request a resource by commenting with a post-specific
-    keyword.</p>
+    <p>Building Intent Social Publish helps manage Instagram posts and sends
+    the resource described on a registered post when someone comments on that
+    post.</p>
 
     <h2>Information We Receive</h2>
     <p>Meta may send us an Instagram comment ID, media ID, username where
     supplied, and comment text when someone comments on content managed by
-    Building Intent Social Publish. We compare the comment text with the
-    keyword offered in that post. We do not store the comment text or
-    username.</p>
+    Building Intent Social Publish. We use the media ID to find the approved
+    reply for that post. We do not store the comment text or username.</p>
 
     <h2>Information We Store</h2>
     <p>We store the media-specific keyword and approved reply, comment IDs used
@@ -117,16 +116,6 @@ async function equalText(first, second) {
     new Uint8Array(firstHash),
     new Uint8Array(secondHash),
   )
-}
-
-export function normalizeKeyword(text) {
-  if (typeof text !== "string") {
-    return ""
-  }
-  return text
-    .trim()
-    .replace(/^[\p{P}\p{S}]+|[\p{P}\p{S}]+$/gu, "")
-    .toUpperCase()
 }
 
 export async function verifySignature(rawBody, signature, secret) {
@@ -275,13 +264,13 @@ async function handleComment(change, env, fetcher) {
   }
 
   const rule = await env.DB.prepare(
-    `SELECT keyword, reply
+    `SELECT reply
        FROM rules
       WHERE media_id = ?1 AND enabled = 1`,
   )
     .bind(mediaId)
     .first()
-  if (!rule || normalizeKeyword(value.text) !== rule.keyword) {
+  if (!rule) {
     return
   }
 

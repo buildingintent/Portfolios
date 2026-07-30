@@ -16,9 +16,9 @@ content and comment reply proposal
 → comment rule registration
 ```
 
-When someone comments the exact keyword, a Cloudflare Worker looks up the rule
-for that Instagram media ID and sends one private reply. The helpful content
-comes first and the relevant App Store URL comes last.
+When someone comments on a registered post, a Cloudflare Worker looks up the
+rule for that Instagram media ID and sends one private reply. The helpful
+content comes first and the relevant App Store URL comes last.
 
 ## Local setup
 
@@ -101,8 +101,8 @@ before retrying.
 ## Cloudflare Worker and D1
 
 The Worker source is in `social/webhook`. It verifies Meta's request signature,
-matches only the whole normalized keyword, ignores self-comments, and records
-each comment ID before sending so webhook retries cannot send duplicates.
+sends on any non-self comment to a registered post, and records each comment ID
+before sending so webhook retries cannot send duplicates.
 
 After logging in to Cloudflare:
 
@@ -130,7 +130,7 @@ npx wrangler deploy
 The Worker free plan currently allows 100,000 requests per day and 10 ms of CPU
 time per HTTP request. D1 free usage currently includes 5 million rows read and
 100,000 rows written per day, with a 500 MB limit per database. This design uses
-one rule row per post and one delivery row per matching comment, not one Worker
+one rule row per post and one delivery row per eligible comment, not one Worker
 route or code rule per post.
 
 References:

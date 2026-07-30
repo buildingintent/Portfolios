@@ -45,6 +45,8 @@ and `short-action-plan`.
   the same keyword. Do not put the raw App Store URL in the caption or mention
   a bio or profile link. End with 5–8 specific, relevant English hashtags;
   avoid generic reach-bait tags.
+- The keyword tells people what to comment, but the Worker sends the approved
+  reply for any non-self comment on that registered post.
 - Add `comment_rule` with the approved uppercase `keyword`, the public
   `promise`, and the complete private `reply`. The reply must deliver the
   promised method, formula, or checklist first. Offer the app as an optional

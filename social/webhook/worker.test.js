@@ -267,7 +267,7 @@ test("rejects a rule without a promise and App Store link", async () => {
   assert.equal(env.DB.rules.size, 0)
 })
 
-test("sends the registered reply for a normalized exact keyword", async () => {
+test("sends the registered reply for any non self comment text", async () => {
   const env = environment()
   await registerRule(env)
   const requests = []
@@ -280,7 +280,7 @@ test("sends the registered reply for a normalized exact keyword", async () => {
   }
 
   const response = await handleRequest(
-    signedWebhook(commentPayload()),
+    signedWebhook(commentPayload({ text: "This was useful!" })),
     env,
     fetcher,
   )
@@ -332,7 +332,7 @@ test("accepts Meta direct field comment payloads", async () => {
   assert.equal(sends, 1)
 })
 
-test("ignores unknown media, unrelated text, and self comments", async () => {
+test("ignores unknown media and self comments", async () => {
   const env = environment()
   await registerRule(env)
   let sends = 0
@@ -342,7 +342,6 @@ test("ignores unknown media, unrelated text, and self comments", async () => {
   }
   const payloads = [
     commentPayload({ mediaId: "18000000000000999" }),
-    commentPayload({ text: "FORECAST please" }),
     commentPayload({
       from: {
         id: "17841425833103994",
