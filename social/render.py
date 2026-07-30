@@ -335,9 +335,14 @@ def validate_content(
 
     caption = draft.get("caption")
     if isinstance(caption, str):
-        if project.get("app_store_url") not in caption:
+        app_store_url = project.get("app_store_url")
+        if (
+            isinstance(app_store_url, str)
+            and app_store_url
+            and app_store_url in caption
+        ):
             errors.append(
-                "caption must contain the project's App Store URL"
+                "caption must not contain the project's App Store URL"
             )
         if len(caption) > 2200:
             errors.append("caption must be at most 2200 characters")
@@ -349,6 +354,44 @@ def validate_content(
         errors.append("draft must contain 4 to 10 slides")
     if not slides:
         return errors
+
+    comment_rule = draft.get("comment_rule")
+    if not isinstance(comment_rule, dict):
+        errors.append("comment_rule must be an object")
+    else:
+        keyword = comment_rule.get("keyword")
+        promise = comment_rule.get("promise")
+        reply = comment_rule.get("reply")
+        if not isinstance(keyword, str) or not re.fullmatch(
+            r"[A-Z][A-Z0-9]{1,19}",
+            keyword,
+        ):
+            errors.append(
+                "comment keyword must contain 2 to 20 uppercase ASCII "
+                "letters or numbers"
+            )
+        if not _non_empty_string(promise):
+            errors.append("comment promise must be a non-empty string")
+        if not _non_empty_string(reply):
+            errors.append("private reply must be a non-empty string")
+        elif project.get("app_store_url") not in reply:
+            errors.append(
+                "private reply must contain the project's App Store URL"
+            )
+        if isinstance(keyword, str):
+            cta = slides[-1] if isinstance(slides[-1], dict) else {}
+            cta_copy = " ".join(
+                str(cta.get(field, ""))
+                for field in ("headline", "body")
+            )
+            if (
+                not isinstance(caption, str)
+                or keyword not in caption
+                or keyword not in cta_copy
+            ):
+                errors.append(
+                    "comment keyword must appear in the caption and CTA"
+                )
 
     if not isinstance(slides[0], dict) or slides[0].get("kind") != "hook":
         errors.append("first slide must be hook")

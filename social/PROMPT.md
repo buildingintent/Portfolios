@@ -1,8 +1,8 @@
 # Daily Instagram Carousel Contract
 
-Create one English Instagram carousel for the 8:00 AM America/Vancouver slot.
-Use two approvals: content approval before any art exists, then final approval
-before publication. Never publish automatically.
+Create one English Instagram carousel only when the user sends the exact
+command `오늘 루틴 시작`. Use two approvals: content approval before any art
+exists, then final approval before publication. Never publish automatically.
 
 ## Before drafting
 
@@ -39,10 +39,16 @@ and `short-action-plan`.
   inside an image. Rewrite the sentence with natural punctuation instead.
   Exact required URLs are the only exception.
 - The CTA contains the configured logo, app name, one positioning sentence,
-  and the official App Store badge—never an app screenshot.
-- The caption accurately summarizes the slides and contains the project's
-  exact App Store URL. Do not mention a bio or profile link. End with 5–8
-  specific, relevant English hashtags; avoid generic reach-bait tags.
+  one outcome-specific comment keyword, and the official App Store badge.
+  Never use an app screenshot.
+- The CTA and caption promise one specific piece of useful help and ask for
+  the same keyword. Do not put the raw App Store URL in the caption or mention
+  a bio or profile link. End with 5–8 specific, relevant English hashtags;
+  avoid generic reach-bait tags.
+- Add `comment_rule` with the approved uppercase `keyword`, the public
+  `promise`, and the complete private `reply`. The reply must deliver the
+  promised method, formula, or checklist first. Offer the app as an optional
+  next step and put the exact App Store URL last.
 - Write a meaningful plan for every slide. For Fina, do not promise outcomes
   or present education as personalized financial, investment, tax, legal, or
   credit advice.
@@ -58,12 +64,17 @@ each slide has only `kind`, `headline`, and `body`; omit `illustration`,
   "project_id": "fina",
   "format_id": "what-happens-next",
   "hook": "Your balance looks fine. Next Tuesday might not.",
-  "caption": "A balance is a snapshot. Find Fina on the App Store: https://apps.apple.com/us/app/fina-financial-companion/id6778169653",
+  "caption": "A balance is a snapshot. Want a simple way to look ahead? Comment FORECAST and we will send it. #cashflow #budgetplanning #moneyhabits #personalfinance #financialplanning",
+  "comment_rule": {
+    "keyword": "FORECAST",
+    "promise": "A simple checklist for looking ahead.",
+    "reply": "Start with the bills you know are coming, then add normal weekly spending and leave room for irregular costs.\n\nIf you want help seeing upcoming pressure, Fina can help:\nhttps://apps.apple.com/us/app/fina-financial-companion/id6778169653"
+  },
   "slides": [
     {"kind": "hook", "headline": "Your balance looks fine.", "body": "Next Tuesday might not."},
     {"kind": "content", "headline": "Today", "body": "Some of that balance is already spoken for."},
     {"kind": "content", "headline": "Next Tuesday", "body": "Two automatic payments arrive together."},
-    {"kind": "cta", "headline": "See it coming with Fina.", "body": "Forecast upcoming pressure before it becomes a problem."}
+    {"kind": "cta", "headline": "See it coming with Fina.", "body": "Comment FORECAST and we will send a simple checklist for looking ahead."}
   ]
 }
 ```
@@ -77,8 +88,8 @@ Run:
 ## Present content and wait
 
 Send to this Codex task: project, topic, format, draft ID, total slide count,
-every `Slide N` headline and body (from `Slide 1` through the CTA), and
-`Caption`. Then stop. The exact phrase
+every `Slide N` headline and body (from `Slide 1` through the CTA), `Caption`,
+`Comment keyword`, `Promise`, and the complete `Private reply`. Then stop. The exact phrase
 `콘텐츠 승인` is the only permission to continue. Do not generate images before content approval.
 
 ## Generate illustrations
@@ -154,7 +165,12 @@ that scene-specific region, not a fixed carousel template.
   "project_id": "fina",
   "format_id": "what-happens-next",
   "hook": "Your balance looks fine. Next Tuesday might not.",
-  "caption": "A balance is a snapshot. Find Fina on the App Store: https://apps.apple.com/us/app/fina-financial-companion/id6778169653",
+  "caption": "A balance is a snapshot. Want a simple way to look ahead? Comment FORECAST and we will send it. #cashflow #budgetplanning #moneyhabits #personalfinance #financialplanning",
+  "comment_rule": {
+    "keyword": "FORECAST",
+    "promise": "A simple checklist for looking ahead.",
+    "reply": "Start with the bills you know are coming, then add normal weekly spending and leave room for irregular costs.\n\nIf you want help seeing upcoming pressure, Fina can help:\nhttps://apps.apple.com/us/app/fina-financial-companion/id6778169653"
+  },
   "art_direction": "Hand-inked editorial scenes on warm paper with sage accents",
   "slides": [
     {
@@ -196,7 +212,7 @@ that scene-specific region, not a fixed carousel template.
     {
       "kind": "cta",
       "headline": "See it coming with Fina.",
-      "body": "Forecast upcoming pressure before it becomes a problem.",
+      "body": "Comment FORECAST and we will send a simple checklist for looking ahead.",
       "alt_text": "Fina logo and a Download on the App Store badge."
     }
   ]
@@ -216,10 +232,11 @@ lettering, awkward cropping, unreadable or overflowing copy, incorrect
 branding, unsupported claims, or art that conflicts with its text layout.
 
 Present the completed carousel in order, plus project, format, draft ID, total
-slides, Caption, and ordered alt text. Stop. Exact `승인` publishes; revision
-feedback changes only affected slides; copy changes return to a new content
-revision and require `콘텐츠 승인` again. Do not create R2 objects or Instagram
-containers before final approval.
+slides, Caption, Comment keyword, Promise, the complete Private reply, and
+ordered alt text. Stop. Exact `승인` publishes; revision feedback changes only
+affected slides; copy changes return to a new content revision and require
+`콘텐츠 승인` again. Do not create R2 objects or Instagram containers before
+final approval.
 
 ## Handle the final reply
 

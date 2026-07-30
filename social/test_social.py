@@ -112,10 +112,20 @@ class DraftValidationTests(unittest.TestCase):
             "format_id": "what-happens-next",
             "hook": "Your balance looks fine. Next Tuesday might not.",
             "caption": (
-                "A balance is a snapshot. Find Fina on the App Store: "
-                "https://apps.apple.com/us/app/"
-                "fina-financial-companion/id6778169653"
+                "A balance is a snapshot. Want a simple way to look "
+                "ahead? Comment FORECAST and we will send it."
             ),
+            "comment_rule": {
+                "keyword": "FORECAST",
+                "promise": "A simple checklist for looking ahead.",
+                "reply": (
+                    "Start with the bills you know are coming, then add "
+                    "normal weekly spending and leave room for irregular "
+                    "costs.\n\nIf you want help seeing upcoming pressure, "
+                    "Fina can help:\nhttps://apps.apple.com/us/app/"
+                    "fina-financial-companion/id6778169653"
+                ),
+            },
             "art_direction": (
                 "Hand-inked editorial illustration with warm paper texture"
             ),
@@ -159,7 +169,10 @@ class DraftValidationTests(unittest.TestCase):
                 {
                     "kind": "cta",
                     "headline": "See it coming with Fina.",
-                    "body": "Forecast upcoming pressure before it becomes a problem.",
+                    "body": (
+                        "Comment FORECAST and we will send a simple "
+                        "checklist for looking ahead."
+                    ),
                     "alt_text": "Fina logo and a Download on the App Store badge.",
                 },
             ],
@@ -228,23 +241,56 @@ class DraftValidationTests(unittest.TestCase):
             errors,
         )
 
-    def test_requires_exact_app_store_url_in_caption(self):
+    def test_accepts_post_specific_comment_rule_without_caption_url(self):
         draft = self.valid_draft()
-        draft["caption"] = "Read the carousel."
+
+        self.assertEqual(
+            validate_draft(draft, self.project(), set()),
+            [],
+        )
+
+    def test_rejects_missing_or_unapproved_comment_rule_copy(self):
+        draft = self.valid_draft()
+        draft["comment_rule"] = {
+            "keyword": "forecast please",
+            "promise": "",
+            "reply": "A useful message without the approved app link.",
+        }
 
         errors = validate_draft(draft, self.project(), set())
 
         self.assertIn(
-            "caption must contain the project's App Store URL",
+            (
+                "comment keyword must contain 2 to 20 uppercase ASCII "
+                "letters or numbers"
+            ),
             errors,
+        )
+        self.assertIn(
+            "comment promise must be a non-empty string",
+            errors,
+        )
+        self.assertIn(
+            "private reply must contain the project's App Store URL",
+            errors,
+        )
+
+    def test_rejects_raw_app_store_url_in_promotional_caption(self):
+        draft = self.valid_draft()
+        draft["caption"] += (
+            " https://apps.apple.com/us/app/"
+            "fina-financial-companion/id6778169653"
+        )
+
+        self.assertIn(
+            "caption must not contain the project's App Store URL",
+            validate_draft(draft, self.project(), set()),
         )
 
     def test_accepts_caption_without_profile_link(self):
         draft = self.valid_draft()
         draft["caption"] = (
-            "Find Fina on the App Store: "
-            "https://apps.apple.com/us/app/"
-            "fina-financial-companion/id6778169653"
+            "Want the checklist? Comment FORECAST and we will send it."
         )
 
         self.assertEqual(
@@ -2136,6 +2182,10 @@ class PublishFlowTests(unittest.TestCase):
                 "event": "rendered",
             },
         )
+        public_history = (
+            isolated_repository / "social" / "history.jsonl"
+        )
+        public_events_before = read_events(public_history)
 
         result = subprocess.run(
             [
@@ -2162,10 +2212,8 @@ class PublishFlowTests(unittest.TestCase):
             "rendered",
         )
         self.assertEqual(
-            read_events(
-                isolated_repository / "social" / "history.jsonl"
-            ),
-            [],
+            read_events(public_history),
+            public_events_before,
         )
 
 
