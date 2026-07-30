@@ -1,0 +1,73 @@
+{
+  "formats": [
+    "ways-checklist",
+    "mistake-fix",
+    "signs-red-flags",
+    "before-after",
+    "myth-reality",
+    "mini-story",
+    "quiz-reveal",
+    "what-happens-next",
+    "do-this-not-that",
+    "a-vs-b",
+    "script-formula",
+    "ranked-options",
+    "three-levels",
+    "contrarian-breakdown",
+    "mini-case-study",
+    "short-action-plan"
+  ],
+  "projects": [
+    {
+      "id": "say-better",
+      "name": "Say Better",
+      "active": true,
+      "logo": "assets/say-better/logo.png",
+      "app_store_url": "https://apps.apple.com/us/app/say-better/id6784318555",
+      "positioning": "Polish everyday writing into clear, confident, professional English without leaving the place you are typing.",
+      "audiences": [
+        "English speakers communicating across languages",
+        "People writing professional messages and email from a phone"
+      ],
+      "problems": [
+        "A message is correct but sounds colder than intended",
+        "A long phone-written email hides the main request",
+        "A direct translation sounds unnatural in English",
+        "The writer keeps rewriting because the tone feels uncertain",
+        "A professional follow-up sounds either pushy or vague",
+        "A short reply does not give the recipient enough context"
+      ],
+      "palette": {
+        "background": "#FBF2E8",
+        "accent": "#F05A3F",
+        "ink": "#24211F"
+      }
+    },
+    {
+      "id": "fina",
+      "name": "Fina",
+      "active": true,
+      "logo": "assets/fina/logo.png",
+      "app_store_url": "https://apps.apple.com/us/app/fina-financial-companion/id6778169653",
+      "positioning": "Forecast upcoming financial pressure and surface useful next steps before a money problem happens.",
+      "audiences": [
+        "People who want a clearer daily view of personal finances",
+        "Households coordinating bills, budgets, and savings"
+      ],
+      "problems": [
+        "Upcoming bills make a healthy balance misleading",
+        "Small subscriptions quietly compress next month's budget",
+        "A spending trend is noticed only after the category is over budget",
+        "Shared household spending creates surprise cash-flow pressure",
+        "Irregular expenses are treated like unexpected emergencies",
+        "Saving goals compete with bills without a forward-looking view"
+      ],
+      "palette": {
+        "background": "#FBF2E8",
+        "accent": "#7A8F72",
+        "ink": "#242621"
+      },
+      "claim_guardrail": "Never promise guaranteed outcomes or present carousel education as personalized financial, investment, tax, legal, or credit advice."
+    }
+  ]
+}

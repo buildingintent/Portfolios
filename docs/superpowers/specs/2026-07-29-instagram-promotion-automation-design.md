@@ -1,35 +1,124 @@
 # Instagram Promotion Automation Design
 
-**Status:** Approved design  
-**Date:** 2026-07-29  
+**Status:** Comment conversion revision awaiting review
+**Date:** 2026-07-30
 **Initial projects:** Say Better and Fina
 
 ## Goal
 
-Create one English Instagram carousel draft every day at 8:00 AM
-America/Vancouver time. Codex generates the content and illustrations, sends
-the completed slides and caption to this Codex task, and publishes through the
-Instagram API immediately after explicit chat approval.
+Create one English Instagram carousel proposal whenever the user sends
+`오늘 루틴 시작` in this Codex task. The account tells relatable stories
+through one recurring fictional family. Some stories stand alone, while
+stories that naturally overlap an app problem connect to that app on the final
+slide. Codex researches, selects, and transforms the source material before
+sending the exact slide-by-slide copy and caption. It generates the
+illustrations only after explicit content approval, sends the completed
+carousel for a second approval, and publishes through the Instagram API
+immediately after final approval. Promotional posts invite readers to comment
+for one useful, topic-specific resource. A deployed webhook sends that help in
+a private reply and presents the app link as an optional next step.
 
 The system must be safe to keep in this public repository. No credential,
 access token, generated presigned URL, or unpublished draft is committed.
 
 ## Confirmed Product Decisions
 
-- Use one Instagram account and rotate active projects fairly.
-- Start with one post per day. Additional daily slots can be added later.
+- Use one Instagram account for family-led stories and app-led educational
+  posts.
+- Do not use a recurring schedule. One `오늘 루틴 시작` command starts one
+  proposal, and the user may start another routine whenever needed.
 - Generate English content only.
-- Require explicit approval in this Codex task. `승인` publishes the latest
-  pending draft; revision feedback regenerates it without publishing.
+- Require two explicit approvals in this Codex task. `콘텐츠 승인` locks the
+  slide copy, caption, keyword, and private reply preview and permits image
+  generation. `승인` publishes the latest completed carousel and activates its
+  approved comment rule. There is no third approval. Revision feedback changes
+  only the relevant stage and never publishes.
 - Publish immediately after approval.
-- Use editorial illustrations similar to the supplied reference.
+- Use full-bleed editorial illustrations with copy integrated into each scene.
+- Art-direct every carousel and slide individually. Do not rotate a fixed
+  library of visual templates.
+- Allow scene-specific devices such as character speech bubbles, physical
+  notes, signs, annotations, environmental type, split scenes, and other
+  compositions invented for the content.
 - Do not depend on app UI screenshots.
-- Use the app logo, app name, official App Store badge, and a short CTA only on
-  the final slide.
-- Include the App Store URL in the caption and mention the profile link.
-- Keep educational slides focused on recognizable audience problems. The app
-  appears only as the final bridge to a solution.
+- When a post promotes an app, use the app logo, app name, official App Store
+  badge, and a short CTA only on the final slide.
+- When a post promotes an app, end with one outcome-specific comment keyword
+  and a concrete promise of useful help. Do not put the raw App Store URL in
+  the caption or mention a bio or profile link.
+- The automatic private reply delivers the promised help first, then offers
+  the app as an optional next step with its exact App Store URL.
+- Let family stories stand alone when no app connection feels natural. Do not
+  add an app logo, App Store badge, product URL, or forced product mention.
+- Keep every slide before an app CTA focused on the story or recognizable
+  audience problem. The app appears only as the final bridge to a solution.
 - Do not reuse the same storytelling format within 14 days.
+
+## Editorial Direction
+
+The family is the account's point of view, not a separate content category
+that must remain free of promotion. Choose a worthwhile premise first, then
+decide whether an app belongs in its ending.
+
+Every proposal has one of three modes:
+
+1. `family_standalone`: a funny or relatable family episode with no product
+   connection. The final slide resolves the story or lands the punchline.
+2. `family_app_bridge`: a family episode whose problem clearly overlaps an
+   app's configured audience problem and capability. The final slide introduces
+   that app as a natural next step.
+3. `app_education`: an app-led educational carousel about a recognizable
+   problem. The app still appears only on the final slide.
+
+The initial soft mix is 60 percent family-led premises and 40 percent app-led
+premises. It is a preference, not a fixed calendar. A family-led premise may
+become either `family_standalone` or `family_app_bridge` after relevance is
+checked, so the actual promotional share may be higher than 40 percent. The
+weights remain easy to adjust as the account develops.
+
+An app bridge is allowed only when all of these are true:
+
+- The story already contains a problem listed in that app's public profile.
+- The app's real capability helps with the next step shown by the story.
+- The CTA follows naturally without rewriting earlier slides into an ad.
+
+Otherwise the post remains standalone. The planner never inserts an unrelated
+app merely to satisfy a promotional quota.
+
+## Family Story Research
+
+The user does not research or shortlist story material. Codex performs the
+entire research and selection step after `오늘 루틴 시작`.
+
+For a family-led premise, Codex:
+
+1. Uses normal web research to inspect recent and historically popular public
+   discussions from a small allowlist of family-oriented communities.
+2. Reviews popularity, comment activity, relatability, visual potential,
+   brand safety, and similarity to recent account history.
+3. Extracts only broad situations and reasons people found them funny. It does
+   not reuse distinctive wording, a recognizable event sequence, or a source's
+   punchline.
+4. Combines multiple signals into a new fictional event for the recurring
+   family, with an original setting, dialogue, escalation, and ending.
+5. Checks whether the finished story naturally qualifies for an app bridge.
+6. Falls back to an app education proposal when no strong, safe family premise
+   is available.
+
+Initial research sources may include `r/toddlers`, `r/daddit`, `r/Parenting`,
+`r/Mommit`, `r/thingsmykidsaid`, and relevant `r/CasualConversation`
+discussions. Conflict-driven forums and stories involving trauma, illness,
+abuse, bullying, death, sexual material, identifiable children, or private
+family details are ineligible.
+
+Research uses Codex web search, not a custom scraper or bulk Reddit ingestion.
+The system does not add Reddit API integration unless Reddit grants written
+commercial permission for the exact use case.
+
+The local ignored draft records source URLs, coarse popularity signals,
+abstracted motifs, safety decisions, and the original transformation. It does
+not retain usernames or full source text. Published history keeps only the
+resulting premise tags needed to prevent repetition.
 
 ## Audience and Positioning
 
@@ -45,6 +134,13 @@ Primary users:
 Content should focus on cross-language clarity, tone, confidence, concise
 mobile writing, and professional communication.
 
+All audience-facing copy, including private replies, must receive a
+humanization pass before review. It should read naturally aloud, use plain and
+specific language, and avoid corporate jargon, filler, generic motivational
+phrasing, and formulaic AI patterns. Headlines, slide text, captions, hashtags,
+and private replies must not use hyphens, en dashes, or em dashes. Exact
+required URLs are the only exception.
+
 ### Fina
 
 Primary users struggle with overspending, inconsistent budgets, subscriptions,
@@ -57,36 +153,78 @@ or present generic carousel content as personalized financial advice.
 
 ## Architecture
 
-The system has three stages and no custom web UI or database.
+The system has five stages and no custom web UI or always-on process on the
+user's computer. Carousel work remains local; only the small comment webhook
+and its minimal delivery state are deployed.
 
-### 1. Daily draft
+### 1. User-triggered research and content proposal
 
-A Codex recurring automation wakes this task at 8:00 AM America/Vancouver.
-Codex:
+The exact command `오늘 루틴 시작` starts the routine. Codex:
 
-1. Reads the active project profiles and publication history.
-2. Chooses the least recently promoted eligible project.
-3. Selects a relatable problem, hook, storytelling format, and resulting slide
-   count.
-4. Uses the Codex image model to create text-free editorial illustrations.
-5. Uses the already-installed Pillow library to compose English copy, slide
-   numbering, and branding at 1080×1350.
-6. Validates the draft and sends ordered slides, caption, and alt text to this
-   task.
+1. Reads the family profile, active project profiles, editorial weights, and
+   publication history.
+2. Selects a family-led or app-led premise using the soft editorial mix and
+   recent history.
+3. For a family-led premise, performs the research and original transformation
+   defined above, then checks whether it qualifies for a natural app bridge. If
+   several apps qualify, it chooses the least recently promoted one. For an
+   app-led premise, it starts with the least recently promoted eligible app.
+4. Selects a hook, storytelling format, and resulting slide count.
+5. Writes the exact English headline and body for every numbered slide.
+6. Writes the matching Instagram caption.
+7. For a promotional post, chooses an outcome-specific keyword, writes the
+   promised practical help, and appends the exact App Store URL as an optional
+   next step in the private reply.
+8. Sends the concise research basis and content proposal to the task. No image
+   is generated.
 
-### 2. Chat approval
+The approval message uses this stable structure:
 
-The draft remains local and private until approval.
+```text
+Mode, app connection, topic, format, and total slide count
+Research basis
+Popular theme
+Why it resonated
+Source links
+Original transformation
+Slide 1 — role
+Headline
+Body
+...
+Final slide — Resolution, punchline, or App CTA
+Headline
+Body
+Caption
+Comment keyword and promise, when promotional
+Private reply preview, when promotional
+```
 
-- `승인` publishes the latest pending draft.
-- Revision feedback creates a new revision and invalidates the prior one.
-- `보류` leaves the draft unpublished.
-- If multiple daily slots are added later, approvals use the displayed draft
-  ID to remove ambiguity.
+### 2. Content approval and art direction
 
-No R2 upload or Instagram container is created before approval.
+- `콘텐츠 승인` locks the displayed copy and permits image generation.
+- Revision feedback produces a new content revision and invalidates the prior
+  one.
+- `보류` leaves the proposal unpublished and generates no images.
+- Every slide then receives a new scene plan derived from its approved meaning,
+  including subject placement, visual action, copy treatment, and exact text
+  region.
+- The Codex image model generates full-bleed illustrations around those text
+  regions. Pillow adds the approved copy exactly.
+- The completed ordered slides, caption, alt text, and any private reply
+  preview return to this task.
 
-### 3. Immediate publication
+### 3. Final approval
+
+- `승인` applies only to the latest completed carousel and permits
+  publication.
+- Image feedback regenerates only the affected slides without reopening
+  approved copy unless the user also requests a copy change.
+- A copy change returns the draft to content approval.
+- `보류` leaves the completed carousel unpublished.
+
+No R2 upload or Instagram container is created before final approval.
+
+### 4. Immediate publication
 
 After approval:
 
@@ -96,18 +234,59 @@ After approval:
 4. Wait for every child container to finish.
 5. Create the parent carousel and publish it exactly once.
 6. Record the Instagram media ID and publication history.
-7. Delete every R2 object and verify that the draft prefix is empty.
+7. For a promotional post, register the published media ID, approved keyword,
+   and approved private reply with the deployed webhook.
+8. Delete every R2 object and verify that the draft prefix is empty.
 
 Instagram's image publishing endpoint requires `image_url`; Meta fetches the
 image from that URL. Presigned R2 URLs satisfy this without making the bucket
 public.
 
+### 5. Comment conversion
+
+A single Cloudflare Worker receives Instagram `comments` webhooks at a public
+HTTPS endpoint. Cloudflare D1 stores only the small amount of state required
+for routing and idempotency:
+
+- One rule per promotional media ID containing its keyword and approved
+  private reply.
+- One delivery row per Instagram comment ID containing status and timestamps.
+
+The Worker:
+
+1. Answers Meta's `GET` verification challenge only when the supplied verify
+   token matches.
+2. Verifies the `X-Hub-Signature-256` HMAC before accepting a webhook body.
+3. Ignores events for another Instagram account, unknown media, self-comments,
+   and posts with no registered rule.
+4. Normalizes case and surrounding whitespace or punctuation, then requires
+   the entire comment to equal the configured ASCII keyword.
+5. Claims the comment ID in D1 before making an outbound request. Only one
+   invocation may process that comment at a time, and a successful delivery is
+   never attempted again.
+6. Sends the approved private reply through Instagram's `/messages` endpoint
+   using the comment ID as the recipient.
+7. Records success. A temporary provider failure is recorded and returned as
+   a server failure so Meta can retry.
+
+The private reply contains one useful method, formula, or checklist that
+fulfills the public promise. The app follows as an optional way to apply that
+help, followed by the exact App Store URL. The system sends only this one
+private reply and does not continue the conversation automatically.
+
+Publication registers a rule through one Worker administration endpoint
+protected by a separate random secret. Standalone family posts never register
+a rule. The Worker and D1 run independently of the user's computer, so a
+sleeping or offline local device does not interrupt lead capture. Tailscale
+Funnel is not needed for this deployed path.
+
 ## Content Engine
 
 Slide count is an output of the chosen hook and format, not a fixed template.
-V1 uses 4–10 slides, including the hook and CTA.
+V1 uses 4–10 slides, including the hook and final resolution, punchline, or
+CTA.
 
-The initial library contains 16 storytelling formats:
+The initial library contains 18 storytelling formats:
 
 | Format | Typical length | Shape |
 | --- | ---: | --- |
@@ -127,55 +306,110 @@ The initial library contains 16 storytelling formats:
 | Contrarian breakdown | 5–8 | A defensible counterpoint, evidence, limit, and takeaway |
 | Mini case study | 5–9 | Clearly labeled hypothetical situation, decision, result |
 | Short action plan | 6–10 | A small sequence readers can follow over several days |
+| Family episode | 4–8 | Setup, family reaction, escalation, resolution or app bridge |
+| Family misunderstanding | 4–7 | Two viewpoints, reveal, shared realization, resolution |
 
 Selection rules:
 
 - A format used in the previous 14 days is ineligible.
-- Before adding more daily slots, expand the library so it still contains at
-  least 14 days of eligible structures at the new posting frequency.
+- Before increasing posting frequency, expand the library so recent posts can
+  still avoid structural repetition.
 - The planner compares the proposed hook, promise, and example with recent
   history and rejects a close repetition.
-- Every non-CTA slide must provide value without mentioning the product.
+- Every slide before an app CTA must work without mentioning the product.
+- Standalone family posts contain no app CTA, logo, App Store badge, product
+  URL, or app-specific hashtag.
+- Family bridge and app education posts contain exactly one app CTA on the
+  final slide. The CTA promises one specific piece of help and requests one
+  outcome-specific keyword.
+- Promotional captions repeat the keyword CTA but do not contain a raw App
+  Store URL. The approved private reply contains the exact URL.
 - Claims must be supported by the slide content.
 - The caption must match the approved slides and may not introduce unsupported
   claims.
-
-The initial schedule contains one 8:00 AM slot. Future frequency increases are
-made by adding explicit schedule slots, rather than changing the content
-engine.
+- Keywords are short ASCII words connected to the desired outcome, such as
+  `CLEAR`, `REPLY`, `PLAN`, or `FORECAST`. The app name is not the default
+  keyword.
 
 ## Visual System
 
+### Fixed identity and project accents
+
+Every post shares one recognizable visual world:
+
+- Fixed warm ivory `#FBF2E8` background with subtle matte paper texture.
+- Fixed rounded, hand-lettered black typography matching the approved
+  typography reference.
+- Fixed recurring family: powder-blue dad, muted-coral mom, dusty-pink
+  daughter, and pale-sky-blue son, with the same rounded proportions,
+  two ear bumps, simple faces, outlines, and relative sizes.
+- Fixed simple editorial treatment: slightly imperfect black ink, matte
+  pastel fills, restrained detail, and generous negative space.
+
+The story determines which family member narrates or appears; multiple family
+members may appear together. Projects do not receive separate mascots.
+
+Only the theme accent varies. Family bridge and app education posts use the
+connected project's configured `palette.accent`: coral for Say Better and sage
+for Fina. Standalone family posts use a restrained accent already present in
+the fixed family palette so they do not imply a product connection. The accent
+never changes the fixed background or recolors the family.
+
+Canonical references live at:
+
+- `social/assets/style/family-reference.png`
+- `social/assets/style/typography-reference.png`
+
 ### Generated illustration
 
-The Codex image model produces illustration only:
+The Codex image model produces a new art-directed scene for every non-CTA
+slide:
 
-- No generated text, numbers, logos, bank screens, transaction data, or app UI.
+- The illustration fills the complete 1080×1350 frame.
+- No fixed visual template library or deterministic top/bottom copy slot.
 - One coherent art direction per carousel: shared palette, line weight,
-  character treatment, and scene vocabulary.
-- Composition leaves predictable safe areas for copy.
+  character treatment, texture, lighting, and scene vocabulary.
+- Each slide uses a composition appropriate to its meaning. Speech bubbles
+  belong to illustrated speakers; notes and signs behave like physical
+  objects; environmental typography follows the scene.
+- The scene plan reserves precise, uncluttered regions for exact copy without
+  forcing every slide into the same layout.
+- Recent composition plans are recorded and close repetitions are rejected.
+- Prompts reject generic startup illustration, fake interface fragments,
+  nonsensical microtext, malformed anatomy, and decorative objects that do not
+  support the idea.
+- Generated art contains no final text, numbers, logos, bank screens,
+  transaction data, or app UI. Empty speech bubbles and text-bearing props are
+  filled deterministically after generation.
 - Illustrations must not reproduce private user data or imply a real financial
   account.
 
 ### Deterministic composition
 
-Pillow composes all exact elements:
+Pillow composes all exact elements from the per-slide scene plan:
 
 - Canvas: 1080×1350 JPEG.
 - Typeface: installed Ubuntu Sans.
-- Text, numbering, logo, CTA, and App Store badge are rendered from approved
+- Text may be placed in speech bubbles, on physical props, along environmental
+  lines, or in other scene-specific regions while preserving exact approved
+  wording.
+- Text regions include coordinates, alignment, color, contrast treatment,
+  optional rotation, and an optional bubble-tail or prop anchor.
+- Slide numbering, logo, CTA, and App Store badge are rendered from approved
   source assets.
 - Copy is short enough to remain readable on a phone.
-- Contrast and text bounds are validated before the draft is shown.
+- Contrast, text bounds, overlap, and safe margins are validated before the
+  completed carousel is shown.
 - Each slide receives meaningful alt text.
 
 Brand palettes start from the approved logos:
 
-- Fina: warm off-white, sage, and charcoal.
-- Say Better: warm off-white, orange-red, and charcoal.
+- Fina: fixed warm ivory, sage theme accent, and charcoal.
+- Say Better: fixed warm ivory, coral theme accent, and charcoal.
 
-The final CTA slide contains no app screenshot. It uses the approved app logo,
-app name, official App Store badge, and one positioning sentence.
+When present, the final CTA slide contains no app screenshot. It uses the
+approved app logo, app name, official App Store badge, and one positioning
+sentence.
 
 Approved logo sources:
 
@@ -192,16 +426,20 @@ does not read the private repositories at runtime.
 The implementation should remain small:
 
 - `social/README.md` — setup and operating instructions.
-- `social/projects.json` — public project profiles, schedule slots, logo paths,
-  positioning, audience problems, and App Store URLs.
+- `social/projects.json` — public family profile, editorial weights, project
+  profiles, logo paths, positioning, audience problems, and App Store URLs.
 - `social/PROMPT.md` — content and image-generation rules used by Codex.
 - `social/render.py` — deterministic Pillow composition and validation.
 - `social/publish.py` — R2 staging, Instagram publication, cleanup, and history.
-- `social/history.jsonl` — append-only, non-secret draft and publication
-  history.
+- `social/webhook/` — one deployed Cloudflare Worker, its D1 schema, and the
+  smallest runnable webhook checks.
+- `social/history.jsonl` — append-only, publication-safe `published` metadata.
+- `.social-work/history.jsonl` — ignored local approval, render-manifest,
+  cleanup, and scene-plan history.
 - `social/assets/` — approved logos and the official App Store badge.
 
-Unpublished drafts and rendered output live in an ignored local work directory.
+Unpublished content proposals, scene plans, generated art, and rendered output
+live in an ignored local work directory.
 The App Store URLs are entered during initial setup because neither private
 repository currently contains a verified public product URL.
 
@@ -212,18 +450,21 @@ Initial setup includes:
 1. Create the Instagram account and convert it to a Professional account.
 2. Create a Meta developer app.
 3. Use Instagram API with Instagram Login and request only
-   `instagram_business_basic` and
-   `instagram_business_content_publish`.
+   `instagram_business_basic`, `instagram_business_content_publish`, and
+   `instagram_business_manage_comments`.
 4. Complete the login flow for the owned professional account.
-5. Verify the account ID and test publishing with a disposable carousel.
-6. Store the resulting credentials outside the repository.
+5. Deploy the Worker and D1 database, configure the public callback URL and
+   verify token, and subscribe the professional account to `comments`.
+6. Verify the account ID, private reply flow, and publishing with a disposable
+   carousel.
+7. Store the resulting credentials outside the repository.
 
 The Instagram Login path is preferred because it does not require linking a
 Facebook Page and requests fewer unrelated permissions.
 
 ## R2 Setup and Cleanup
 
-Create a new private bucket named `portfolio-social-staging`. Do not reuse any
+Create a new private bucket named `building-intent-social`. Do not reuse any
 backup bucket.
 
 - Issue an R2 API token restricted to object read/write on this bucket.
@@ -238,18 +479,30 @@ backup bucket.
 ## Secrets
 
 The public repository contains variable names and setup instructions only.
-Actual values live outside the repository in a permission-restricted local
-configuration file or Codex-managed secret environment.
+Actual values live in the ignored repository-root `.env`, restricted to the
+local user, or in Codex-managed secret environment variables.
 
 Required secrets:
 
 - Instagram access token and professional account ID.
-- Meta app credentials needed during authentication or token maintenance.
+- Meta app secret and webhook verification token.
+- A separate Worker rule-registration secret.
 - R2 account ID, bucket-scoped access key ID, and secret access key.
+
+The implementation uses these environment or Worker Secret names:
+
+- `INSTAGRAM_ACCESS_TOKEN`
+- `INSTAGRAM_USER_ID`
+- `META_APP_SECRET`
+- `INSTAGRAM_WEBHOOK_VERIFY_TOKEN`
+- `INSTAGRAM_WEBHOOK_ADMIN_TOKEN`
+- `INSTAGRAM_WEBHOOK_ADMIN_URL`
 
 Rules:
 
-- Never place secrets in `.env` inside this repository.
+- Keep `.env` ignored, permission-restricted, and absent from commits.
+- Store deployed values with Cloudflare Worker Secrets, never plaintext Worker
+  variables or committed configuration.
 - Never print authorization headers, tokens, presigned URLs, or provider
   response bodies containing credentials.
 - Parse any local credential file as data; do not execute it with `source`.
@@ -257,18 +510,25 @@ Rules:
 
 ## Idempotency and Failure Handling
 
-Every draft has a unique ID and one state:
+Every draft has a unique ID and follows two approval gates:
 
-`drafted → approved → publishing → published`
+`content_drafted → content_approved → rendered → approved → publishing → published`
 
-or
-
-`drafted → revised/held`
+or a revision/hold terminal state from either approval gate.
 
 Publication records the final Instagram media ID before reporting success.
 Retries inspect history first:
 
+- Content drafting records the fingerprint of the displayed copy; content
+  approval rejects any mismatch.
+- Every rendered event records the canonical render-ready draft fingerprint
+  and ordered JPEG SHA-256 hashes. Final approval and publication both reject
+  any mismatch.
+- Images cannot be generated before `content_approved`.
+- Publication cannot start before the separate final `approved` event.
 - A published draft is never published again.
+- One per-draft filesystem lock covers content-state changes, rendering,
+  image/copy revisions, final approval, publication, and staging cleanup.
 - A partial child-container failure never creates a parent carousel.
 - A parent container is published once.
 - If Instagram publication succeeds but R2 deletion fails, only cleanup is
@@ -277,36 +537,62 @@ Retries inspect history first:
 - Failed cleanup is reported in this task and retried before the next draft.
 - An expired or rejected Instagram token blocks publication and produces a
   setup alert; the approved draft remains available for retry.
+- Rule registration is retried without republishing the carousel.
+- D1 enforces one delivery row per comment ID. Repeated webhook deliveries
+  cannot produce a second private reply.
+- Invalid signatures and rule-registration credentials are rejected before
+  reading or changing state.
 
 ## Verification
 
 Keep verification proportional to the small implementation:
 
-1. One runnable test file covers rendering bounds and the publication state
-   machine with provider calls replaced by local fakes.
-2. The failure-path check proves that R2 cleanup runs after a child-container,
+1. One runnable test file covers content approval, rendering bounds, and the
+   publication state machine with provider calls replaced by local fakes.
+2. A state check proves image generation is unavailable before content approval
+   and publication is unavailable before final approval.
+3. The failure-path check proves that R2 cleanup runs after a child-container,
    parent-container, or publish failure.
-3. The idempotency check proves that a recorded Instagram media ID prevents a
+4. The idempotency check proves that a recorded Instagram media ID prevents a
    second publish call.
-4. Setup concludes with one explicitly approved end-to-end test carousel on
+5. One Worker check covers verification, signature rejection, exact keyword
+   matching, unknown media, and duplicate comment delivery with provider calls
+   replaced by local fakes.
+6. One deployed smoke test verifies the Meta callback challenge and a test
+   comment private reply without exposing secrets in logs.
+7. Setup concludes with one explicitly approved end-to-end test carousel on
    the new professional account, followed by verification that the R2 prefix is
    empty.
 
+The source implementation is not production-verified until step 7 and the
+external account and lifecycle checks are complete.
+
 ## Out of Scope for V1
 
-- A web dashboard, database, multi-user approval system, or analytics UI.
-- Reels, Stories, ads, comments, and direct-message automation.
+- A web dashboard, hosted editorial database, multi-user approval system, or
+  analytics UI.
+- Reels, Stories, ads, inbound conversation handling, follow-up messages, and
+  bulk direct-message campaigns.
 - Automatic posting without explicit chat approval.
 - App UI screenshot capture.
-- More than one daily slot until additional project volume requires it.
+- Recurring or time-based scheduling.
 - Performance analytics changing future content; publication history is kept
   so this can be added later when there is enough data.
 
 ## Primary References
 
+- [Reddit: developer platform and commercial data access](https://support.reddithelp.com/hc/en-us/articles/14945211791892-Developer-Platform-Accessing-Reddit-Data)
+- [Reddit Data API Terms](https://redditinc.com/policies/data-api-terms)
+- [U.S. Copyright Office: ideas and expression](https://www.copyright.gov/help/faq/faq-protect.html)
+- [U.S. Copyright Office: derivative works](https://www.copyright.gov/eco/help-limitation.html)
 - [Meta: create an image container](https://www.postman.com/meta/instagram/request/23987686-f4b5a72d-a125-4080-8968-93de1a549e68)
 - [Meta: publish a container](https://www.postman.com/meta/instagram/request/23987686-299b176b-90aa-4d8a-b6cf-e6028fc69de5)
 - [Meta: Instagram API with Instagram Login](https://www.postman.com/meta/instagram/folder/23987686-98bfade9-3736-4738-8b4a-f56d6534f6de)
+- [Meta: private replies](https://www.postman.com/meta/instagram/request/23987686-189d7215-22b3-403f-b2f5-a46c7e66a514)
+- [Meta: subscribe to webhooks](https://www.postman.com/meta/instagram/request/23987686-0223707a-7035-46a2-8015-1fdf7249278f)
 - [Cloudflare R2 presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/)
 - [Cloudflare R2 object deletion](https://developers.cloudflare.com/r2/objects/delete-objects/)
 - [Cloudflare R2 object lifecycle rules](https://developers.cloudflare.com/r2/buckets/object-lifecycles/)
+- [Cloudflare Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/)
+- [Cloudflare D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/)
+- [Cloudflare Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/)

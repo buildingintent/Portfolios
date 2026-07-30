@@ -1,3 +1,12 @@
 .superpowers/
 .worktrees/
 .env
+.venv/
+.social-work/
+__pycache__/
+*.pyc
+social/*.local.json
+social/*.local.env
+social/webhook/.dev.vars*
+social/webhook/.wrangler/
+social/webhook/node_modules/

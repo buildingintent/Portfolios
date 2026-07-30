@@ -1,5 +1,11 @@
 # Instagram Promotion Automation Implementation Plan
 
+**Status: Superseded.** The content-first plan
+`2026-07-29-content-first-art-direction.md` and `social/README.md` govern the
+current two-approval workflow, fixed public configuration, repository-root
+`.env`, local runtime ledger, and release checks. Environment, history, and
+configuration instructions below are retained only as implementation history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Generate one English Instagram carousel draft at 8:00 AM America/Vancouver, present it in this Codex task for approval, and publish it immediately after `승인` using private R2 staging that is always cleaned up.
@@ -259,8 +265,8 @@ social/*.local.env
 Create the local environment and install the two runtime dependencies:
 
 ```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -r social/requirements.txt
+uv venv .venv
+uv pip install --python .venv/bin/python -r social/requirements.txt
 ```
 
 - [ ] **Step 4: Copy and verify the approved app logos**
@@ -661,7 +667,7 @@ IG_ACCESS_TOKEN
 META_API_VERSION
 ```
 
-Require `R2_BUCKET` to equal `portfolio-social-staging`. Reject missing/empty values before upload.
+Require `R2_BUCKET` to equal `building-intent-social`. Reject missing/empty values before upload.
 
 Implement `upload_images`, `presign_images`, and `cleanup_prefix`.
 
@@ -821,7 +827,7 @@ Document only these four sections:
    - Obtain the Instagram professional user ID and long-lived access token.
    - Record token expiry and renewal procedure.
 3. **Create private R2 staging**
-   - Create private bucket `portfolio-social-staging`.
+   - Create private bucket `building-intent-social`.
    - Disable public development URL and custom domains.
    - Create an object read/write token scoped only to that bucket.
    - Add a lifecycle rule deleting objects after one day.
