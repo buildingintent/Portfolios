@@ -1,7 +1,7 @@
 # Instagram Promotion Automation Design
 
-**Status:** Approved design, revised
-**Date:** 2026-07-29  
+**Status:** Comment conversion revision awaiting review
+**Date:** 2026-07-30
 **Initial projects:** Say Better and Fina
 
 ## Goal
@@ -14,7 +14,9 @@ slide. Codex researches, selects, and transforms the source material before
 sending the exact slide-by-slide copy and caption. It generates the
 illustrations only after explicit content approval, sends the completed
 carousel for a second approval, and publishes through the Instagram API
-immediately after final approval.
+immediately after final approval. Promotional posts invite readers to comment
+for one useful, topic-specific resource. A deployed webhook sends that help in
+a private reply and presents the app link as an optional next step.
 
 The system must be safe to keep in this public repository. No credential,
 access token, generated presigned URL, or unpublished draft is committed.
@@ -27,9 +29,10 @@ access token, generated presigned URL, or unpublished draft is committed.
   proposal, and the user may start another routine whenever needed.
 - Generate English content only.
 - Require two explicit approvals in this Codex task. `콘텐츠 승인` locks the
-  slide copy and permits image generation. `승인` publishes the latest
-  completed carousel. Revision feedback changes only the relevant stage and
-  never publishes.
+  slide copy, caption, keyword, and private reply preview and permits image
+  generation. `승인` publishes the latest completed carousel and activates its
+  approved comment rule. There is no third approval. Revision feedback changes
+  only the relevant stage and never publishes.
 - Publish immediately after approval.
 - Use full-bleed editorial illustrations with copy integrated into each scene.
 - Art-direct every carousel and slide individually. Do not rotate a fixed
@@ -40,8 +43,11 @@ access token, generated presigned URL, or unpublished draft is committed.
 - Do not depend on app UI screenshots.
 - When a post promotes an app, use the app logo, app name, official App Store
   badge, and a short CTA only on the final slide.
-- When a post promotes an app, include the exact App Store URL in the caption.
-  Do not mention a bio or profile link.
+- When a post promotes an app, end with one outcome-specific comment keyword
+  and a concrete promise of useful help. Do not put the raw App Store URL in
+  the caption or mention a bio or profile link.
+- The automatic private reply delivers the promised help first, then offers
+  the app as an optional next step with its exact App Store URL.
 - Let family stories stand alone when no app connection feels natural. Do not
   add an app logo, App Store badge, product URL, or forced product mention.
 - Keep every slide before an app CTA focused on the story or recognizable
@@ -128,11 +134,12 @@ Primary users:
 Content should focus on cross-language clarity, tone, confidence, concise
 mobile writing, and professional communication.
 
-All public copy must receive a humanization pass before review. It should read
-naturally aloud, use plain and specific language, and avoid corporate jargon,
-filler, generic motivational phrasing, and formulaic AI patterns. Headlines,
-slide text, captions, and hashtags must not use hyphens, en dashes, or em
-dashes. Exact required URLs are the only exception.
+All audience-facing copy, including private replies, must receive a
+humanization pass before review. It should read naturally aloud, use plain and
+specific language, and avoid corporate jargon, filler, generic motivational
+phrasing, and formulaic AI patterns. Headlines, slide text, captions, hashtags,
+and private replies must not use hyphens, en dashes, or em dashes. Exact
+required URLs are the only exception.
 
 ### Fina
 
@@ -146,7 +153,9 @@ or present generic carousel content as personalized financial advice.
 
 ## Architecture
 
-The system has four stages and no custom web UI or database.
+The system has five stages and no custom web UI or always-on process on the
+user's computer. Carousel work remains local; only the small comment webhook
+and its minimal delivery state are deployed.
 
 ### 1. User-triggered research and content proposal
 
@@ -163,7 +172,10 @@ The exact command `오늘 루틴 시작` starts the routine. Codex:
 4. Selects a hook, storytelling format, and resulting slide count.
 5. Writes the exact English headline and body for every numbered slide.
 6. Writes the matching Instagram caption.
-7. Sends the concise research basis and content proposal to the task. No image
+7. For a promotional post, chooses an outcome-specific keyword, writes the
+   promised practical help, and appends the exact App Store URL as an optional
+   next step in the private reply.
+8. Sends the concise research basis and content proposal to the task. No image
    is generated.
 
 The approval message uses this stable structure:
@@ -183,6 +195,8 @@ Final slide — Resolution, punchline, or App CTA
 Headline
 Body
 Caption
+Comment keyword and promise, when promotional
+Private reply preview, when promotional
 ```
 
 ### 2. Content approval and art direction
@@ -196,7 +210,8 @@ Caption
   region.
 - The Codex image model generates full-bleed illustrations around those text
   regions. Pillow adds the approved copy exactly.
-- The completed ordered slides, caption, and alt text return to this task.
+- The completed ordered slides, caption, alt text, and any private reply
+  preview return to this task.
 
 ### 3. Final approval
 
@@ -219,11 +234,51 @@ After approval:
 4. Wait for every child container to finish.
 5. Create the parent carousel and publish it exactly once.
 6. Record the Instagram media ID and publication history.
-7. Delete every R2 object and verify that the draft prefix is empty.
+7. For a promotional post, register the published media ID, approved keyword,
+   and approved private reply with the deployed webhook.
+8. Delete every R2 object and verify that the draft prefix is empty.
 
 Instagram's image publishing endpoint requires `image_url`; Meta fetches the
 image from that URL. Presigned R2 URLs satisfy this without making the bucket
 public.
+
+### 5. Comment conversion
+
+A single Cloudflare Worker receives Instagram `comments` webhooks at a public
+HTTPS endpoint. Cloudflare D1 stores only the small amount of state required
+for routing and idempotency:
+
+- One rule per promotional media ID containing its keyword and approved
+  private reply.
+- One delivery row per Instagram comment ID containing status and timestamps.
+
+The Worker:
+
+1. Answers Meta's `GET` verification challenge only when the supplied verify
+   token matches.
+2. Verifies the `X-Hub-Signature-256` HMAC before accepting a webhook body.
+3. Ignores events for another Instagram account, unknown media, self-comments,
+   and posts with no registered rule.
+4. Normalizes case and surrounding whitespace or punctuation, then requires
+   the entire comment to equal the configured ASCII keyword.
+5. Claims the comment ID in D1 before making an outbound request. Only one
+   invocation may process that comment at a time, and a successful delivery is
+   never attempted again.
+6. Sends the approved private reply through Instagram's `/messages` endpoint
+   using the comment ID as the recipient.
+7. Records success. A temporary provider failure is recorded and returned as
+   a server failure so Meta can retry.
+
+The private reply contains one useful method, formula, or checklist that
+fulfills the public promise. The app follows as an optional way to apply that
+help, followed by the exact App Store URL. The system sends only this one
+private reply and does not continue the conversation automatically.
+
+Publication registers a rule through one Worker administration endpoint
+protected by a separate random secret. Standalone family posts never register
+a rule. The Worker and D1 run independently of the user's computer, so a
+sleeping or offline local device does not interrupt lead capture. Tailscale
+Funnel is not needed for this deployed path.
 
 ## Content Engine
 
@@ -265,10 +320,16 @@ Selection rules:
 - Standalone family posts contain no app CTA, logo, App Store badge, product
   URL, or app-specific hashtag.
 - Family bridge and app education posts contain exactly one app CTA on the
-  final slide and the exact App Store URL in the caption.
+  final slide. The CTA promises one specific piece of help and requests one
+  outcome-specific keyword.
+- Promotional captions repeat the keyword CTA but do not contain a raw App
+  Store URL. The approved private reply contains the exact URL.
 - Claims must be supported by the slide content.
 - The caption must match the approved slides and may not introduce unsupported
   claims.
+- Keywords are short ASCII words connected to the desired outcome, such as
+  `CLEAR`, `REPLY`, `PLAN`, or `FORECAST`. The app name is not the default
+  keyword.
 
 ## Visual System
 
@@ -370,6 +431,8 @@ The implementation should remain small:
 - `social/PROMPT.md` — content and image-generation rules used by Codex.
 - `social/render.py` — deterministic Pillow composition and validation.
 - `social/publish.py` — R2 staging, Instagram publication, cleanup, and history.
+- `social/webhook/` — one deployed Cloudflare Worker, its D1 schema, and the
+  smallest runnable webhook checks.
 - `social/history.jsonl` — append-only, publication-safe `published` metadata.
 - `.social-work/history.jsonl` — ignored local approval, render-manifest,
   cleanup, and scene-plan history.
@@ -387,11 +450,14 @@ Initial setup includes:
 1. Create the Instagram account and convert it to a Professional account.
 2. Create a Meta developer app.
 3. Use Instagram API with Instagram Login and request only
-   `instagram_business_basic` and
-   `instagram_business_content_publish`.
+   `instagram_business_basic`, `instagram_business_content_publish`, and
+   `instagram_business_manage_comments`.
 4. Complete the login flow for the owned professional account.
-5. Verify the account ID and test publishing with a disposable carousel.
-6. Store the resulting credentials outside the repository.
+5. Deploy the Worker and D1 database, configure the public callback URL and
+   verify token, and subscribe the professional account to `comments`.
+6. Verify the account ID, private reply flow, and publishing with a disposable
+   carousel.
+7. Store the resulting credentials outside the repository.
 
 The Instagram Login path is preferred because it does not require linking a
 Facebook Page and requests fewer unrelated permissions.
@@ -419,12 +485,24 @@ local user, or in Codex-managed secret environment variables.
 Required secrets:
 
 - Instagram access token and professional account ID.
-- Meta app credentials needed during authentication or token maintenance.
+- Meta app secret and webhook verification token.
+- A separate Worker rule-registration secret.
 - R2 account ID, bucket-scoped access key ID, and secret access key.
+
+The implementation uses these environment or Worker Secret names:
+
+- `INSTAGRAM_ACCESS_TOKEN`
+- `INSTAGRAM_USER_ID`
+- `META_APP_SECRET`
+- `INSTAGRAM_WEBHOOK_VERIFY_TOKEN`
+- `INSTAGRAM_WEBHOOK_ADMIN_TOKEN`
+- `INSTAGRAM_WEBHOOK_ADMIN_URL`
 
 Rules:
 
 - Keep `.env` ignored, permission-restricted, and absent from commits.
+- Store deployed values with Cloudflare Worker Secrets, never plaintext Worker
+  variables or committed configuration.
 - Never print authorization headers, tokens, presigned URLs, or provider
   response bodies containing credentials.
 - Parse any local credential file as data; do not execute it with `source`.
@@ -459,6 +537,11 @@ Retries inspect history first:
 - Failed cleanup is reported in this task and retried before the next draft.
 - An expired or rejected Instagram token blocks publication and produces a
   setup alert; the approved draft remains available for retry.
+- Rule registration is retried without republishing the carousel.
+- D1 enforces one delivery row per comment ID. Repeated webhook deliveries
+  cannot produce a second private reply.
+- Invalid signatures and rule-registration credentials are rejected before
+  reading or changing state.
 
 ## Verification
 
@@ -472,17 +555,24 @@ Keep verification proportional to the small implementation:
    parent-container, or publish failure.
 4. The idempotency check proves that a recorded Instagram media ID prevents a
    second publish call.
-5. Setup concludes with one explicitly approved end-to-end test carousel on
+5. One Worker check covers verification, signature rejection, exact keyword
+   matching, unknown media, and duplicate comment delivery with provider calls
+   replaced by local fakes.
+6. One deployed smoke test verifies the Meta callback challenge and a test
+   comment private reply without exposing secrets in logs.
+7. Setup concludes with one explicitly approved end-to-end test carousel on
    the new professional account, followed by verification that the R2 prefix is
    empty.
 
-The source implementation is not production-verified until step 5 and the
+The source implementation is not production-verified until step 7 and the
 external account and lifecycle checks are complete.
 
 ## Out of Scope for V1
 
-- A web dashboard, database, multi-user approval system, or analytics UI.
-- Reels, Stories, ads, comments, and direct-message automation.
+- A web dashboard, hosted editorial database, multi-user approval system, or
+  analytics UI.
+- Reels, Stories, ads, inbound conversation handling, follow-up messages, and
+  bulk direct-message campaigns.
 - Automatic posting without explicit chat approval.
 - App UI screenshot capture.
 - Recurring or time-based scheduling.
@@ -498,6 +588,11 @@ external account and lifecycle checks are complete.
 - [Meta: create an image container](https://www.postman.com/meta/instagram/request/23987686-f4b5a72d-a125-4080-8968-93de1a549e68)
 - [Meta: publish a container](https://www.postman.com/meta/instagram/request/23987686-299b176b-90aa-4d8a-b6cf-e6028fc69de5)
 - [Meta: Instagram API with Instagram Login](https://www.postman.com/meta/instagram/folder/23987686-98bfade9-3736-4738-8b4a-f56d6534f6de)
+- [Meta: private replies](https://www.postman.com/meta/instagram/request/23987686-189d7215-22b3-403f-b2f5-a46c7e66a514)
+- [Meta: subscribe to webhooks](https://www.postman.com/meta/instagram/request/23987686-0223707a-7035-46a2-8015-1fdf7249278f)
 - [Cloudflare R2 presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/)
 - [Cloudflare R2 object deletion](https://developers.cloudflare.com/r2/objects/delete-objects/)
 - [Cloudflare R2 object lifecycle rules](https://developers.cloudflare.com/r2/buckets/object-lifecycles/)
+- [Cloudflare Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/)
+- [Cloudflare D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/)
+- [Cloudflare Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/)
