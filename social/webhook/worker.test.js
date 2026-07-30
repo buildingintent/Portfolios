@@ -157,6 +157,32 @@ async function registerRule(env) {
   )
 }
 
+test("serves the public privacy policy without application state", async () => {
+  const response = await handleRequest(
+    new Request("https://worker.test/privacy"),
+    {},
+  )
+  const rejected = await handleRequest(
+    new Request("https://worker.test/privacy", { method: "POST" }),
+    {},
+  )
+  const html = await response.text()
+
+  assert.equal(response.status, 200)
+  assert.equal(rejected.status, 404)
+  assert.match(response.headers.get("Content-Type"), /^text\/html/)
+  assert.match(html, /Building Intent Social Publish/)
+  assert.match(html, /Effective date: July 30, 2026/)
+  assert.match(html, /Information We Receive/)
+  assert.match(html, /How We Use Information/)
+  assert.match(html, /Sharing and Service Providers/)
+  assert.match(html, /Retention and Deletion/)
+  assert.match(html, /buildingintent@gmail\.com/)
+  assert.match(html, /privacycenter\.instagram\.com\/policy/)
+  assert.match(html, /cloudflare\.com\/privacypolicy/)
+  assert.doesNotMatch(html, /<script/i)
+})
+
 test("answers Meta verification only for the configured token", async () => {
   const env = environment()
   const accepted = await handleRequest(

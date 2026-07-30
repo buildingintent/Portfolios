@@ -8,6 +8,79 @@ function textResponse(text, status) {
   })
 }
 
+function privacyResponse() {
+  return new Response(
+    `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy Policy | Building Intent Social Publish</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; }
+    body { margin: 0; color: #24211f; background: #fbf2e8; }
+    main { max-width: 720px; margin: auto; padding: 48px 24px 72px; }
+    h1 { font-size: clamp(2rem, 6vw, 3.5rem); margin-bottom: 8px; }
+    h2 { margin-top: 36px; }
+    p, li { font-size: 1.05rem; line-height: 1.7; }
+    a { color: #9c3524; }
+    .date { color: #625b56; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Privacy Policy</h1>
+    <p class="date">Effective date: July 30, 2026</p>
+    <p>Building Intent Social Publish helps manage Instagram posts and respond
+    when people request a resource by commenting with a post-specific
+    keyword.</p>
+
+    <h2>Information We Receive</h2>
+    <p>Meta may send us an Instagram comment ID, media ID, username where
+    supplied, and comment text when someone comments on content managed by
+    Building Intent Social Publish. We compare the comment text with the
+    keyword offered in that post. We do not store the comment text or
+    username.</p>
+
+    <h2>Information We Store</h2>
+    <p>We store the media-specific keyword and approved reply, comment IDs used
+    to prevent duplicate replies, delivery status, and Meta message IDs.</p>
+
+    <h2>How We Use Information</h2>
+    <p>We use this information to send the requested resource and relevant App
+    Store link, prevent duplicate messages, secure the service, and
+    troubleshoot delivery failures.</p>
+
+    <h2>Sharing and Service Providers</h2>
+    <p><a href="https://privacycenter.instagram.com/policy/">Meta</a> provides
+    the Instagram platform. <a href="https://www.cloudflare.com/privacypolicy/">
+    Cloudflare</a> hosts this service and its database. We do not sell personal
+    information or share it for third-party advertising.</p>
+
+    <h2>Retention and Deletion</h2>
+    <p>We keep stored identifiers and delivery records only as long as needed
+    to operate the service and prevent duplicate replies. To request access to
+    or deletion of information associated with your Instagram interaction,
+    email <a href="mailto:buildingintent@gmail.com">
+    buildingintent@gmail.com</a>.</p>
+
+    <h2>Contact</h2>
+    <p>Email <a href="mailto:buildingintent@gmail.com">
+    buildingintent@gmail.com</a> with privacy questions.</p>
+
+    <h2>Changes to This Policy</h2>
+    <p>We may update this policy when the service or its data practices change.
+    The effective date above identifies the current version.</p>
+  </main>
+</body>
+</html>`,
+    {
+      status: 200,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    },
+  )
+}
+
 function hexBytes(value) {
   if (!/^[0-9a-f]+$/i.test(value) || value.length % 2) {
     return null
@@ -293,6 +366,9 @@ async function verifyWebhook(request, env) {
 
 export async function handleRequest(request, env, fetcher = fetch) {
   const { pathname } = new URL(request.url)
+  if (pathname === "/privacy" && request.method === "GET") {
+    return privacyResponse()
+  }
   if (pathname === "/instagram/webhook" && request.method === "GET") {
     return verifyWebhook(request, env)
   }
