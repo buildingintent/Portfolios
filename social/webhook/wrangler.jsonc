@@ -3,6 +3,8 @@
   "name": "building-intent-instagram-webhook",
   "main": "worker.js",
   "compatibility_date": "2026-07-30",
+  "workers_dev": true,
+  "preview_urls": false,
   "secrets": {
     "required": [
       "INSTAGRAM_ACCESS_TOKEN",
@@ -11,5 +13,12 @@
       "INSTAGRAM_WEBHOOK_VERIFY_TOKEN",
       "INSTAGRAM_WEBHOOK_ADMIN_TOKEN"
     ]
-  }
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "building-intent-instagram",
+      "database_id": "c449b5b6-2cd3-4239-a347-5eb89bf4dc89"
+    }
+  ]
 }

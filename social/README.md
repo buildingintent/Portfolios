@@ -50,8 +50,13 @@ INSTAGRAM_WEBHOOK_ADMIN_TOKEN
 ```
 
 `INSTAGRAM_WEBHOOK_ADMIN_URL` is the deployed Worker URL ending in
-`/admin/rules`. The matching admin token is also stored as an encrypted Worker
-secret.
+`/admin/rules`:
+
+```text
+https://building-intent-instagram-webhook.cwsbrian.workers.dev/admin/rules
+```
+
+The matching admin token is also stored as an encrypted Worker secret.
 
 `R2_ACCESS_TOKEN` is not used by the publisher. The R2 bucket name is fixed as
 `building-intent-social`. Never commit `.env`, paste its values into chat, or
@@ -147,7 +152,11 @@ instagram_business_manage_comments
 In the Meta app's Instagram API settings:
 
 1. Set the callback URL to the deployed Worker URL ending in
-   `/instagram/webhook`.
+   `/instagram/webhook`:
+
+   ```text
+   https://building-intent-instagram-webhook.cwsbrian.workers.dev/instagram/webhook
+   ```
 2. Enter the same value stored as `INSTAGRAM_WEBHOOK_VERIFY_TOKEN`.
 3. Subscribe the account to the `comments` webhook field.
 4. Generate a fresh access token containing the required permissions if the
