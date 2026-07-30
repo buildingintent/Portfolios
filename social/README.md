@@ -1,20 +1,26 @@
 # Instagram Promotion Workflow
 
-This workflow creates one English carousel draft every day at 8:00 AM
-America/Vancouver, shows its content in Codex before image generation, then
-publishes only after final `승인`.
+This workflow starts only when the user says `오늘 루틴 시작`.
 
-It starts with Say Better and Fina, rotating by the least recent successful
-publication. Generated illustrations and unpublished drafts stay outside Git.
-Approved JPEGs are briefly exposed through private Cloudflare R2 presigned URLs
-because Instagram must fetch each image from a URL. The objects are deleted and
-the prefix is verified empty after every success or failure.
+It prepares an English carousel and its post-specific comment keyword, waits
+for content approval, generates the images, waits for final approval, publishes
+to Instagram, and registers that post's approved private-reply rule.
 
-This source workflow is not production-verified yet. A user-approved visual,
-external account/lifecycle checks, and one explicitly approved end-to-end
-publication remain release checkpoints.
+```text
+content and comment reply proposal
+→ 콘텐츠 승인
+→ image generation
+→ final carousel review
+→ 승인
+→ Instagram publish
+→ comment rule registration
+```
 
-## 1. Install locally
+When someone comments the exact keyword, a Cloudflare Worker looks up the rule
+for that Instagram media ID and sends one private reply. The helpful content
+comes first and the relevant App Store URL comes last.
+
+## Local setup
 
 From the repository root:
 
@@ -24,133 +30,134 @@ uv pip install --python .venv/bin/python -r social/requirements.txt
 .venv/bin/python -m unittest social/test_social.py -v
 ```
 
-`uv` is used because it creates the environment without requiring the
-OS-specific `python3-venv` package.
+Public app information is in `social/projects.json`. Add future apps there with
+their logo, live App Store URL, positioning, audience problems, and palette.
+There is no posting schedule in the code.
 
-Public configuration is in `projects.json`. Add future apps there with their
-logo, live App Store URL, positioning, audience problems, and palette. Add
-explicit schedule slots only when more than one daily post is needed.
+## Local secrets
 
-## 2. Connect Instagram
+The repository-root `.env` is ignored by Git and must have permission `600`.
+The publisher requires these names:
 
-This is a one-time setup in Meta:
+```text
+INSTAGRAM_USER_ID
+INSTAGRAM_ACCESS_TOKEN
+R2_ACCOUNT_ID
+R2_ACCESS_KEY_ID
+R2_SECRET_ACCESS_KEY
+INSTAGRAM_WEBHOOK_ADMIN_URL
+INSTAGRAM_WEBHOOK_ADMIN_TOKEN
+```
 
-1. Create the Instagram account that will publish the carousels.
-2. Convert it to a Professional account.
-3. Create a Meta developer app.
-4. Add **Instagram API with Instagram Login**.
-5. Request only:
-   - `instagram_business_basic`
-   - `instagram_business_content_publish`
-6. Authorize the professional account you own.
-7. Record the Instagram professional user ID and long-lived access token.
-8. Record the token's expiry and renewal procedure.
+`INSTAGRAM_WEBHOOK_ADMIN_URL` is the deployed Worker URL ending in
+`/admin/rules`. The matching admin token is also stored as an encrypted Worker
+secret.
 
-Instagram Login is used so a Facebook Page is not required. Start
-`META_API_VERSION` at `v23.0`, which matches Meta's verified publishing example,
-and check Meta's currently supported versions during setup.
-
-References:
-
-- [Instagram API with Instagram Login](https://www.postman.com/meta/instagram/folder/23987686-98bfade9-3736-4738-8b4a-f56d6534f6de)
-- [Create an image container](https://www.postman.com/meta/instagram/request/23987686-f4b5a72d-a125-4080-8968-93de1a549e68)
-- [Publish a container](https://www.postman.com/meta/instagram/request/23987686-299b176b-90aa-4d8a-b6cf-e6028fc69de5)
-
-## 3. Create private R2 staging
-
-In Cloudflare:
-
-1. Create a new R2 bucket named `building-intent-social`.
-2. Keep the public development URL and custom domains disabled.
-3. Create an R2 API token with object read/write access scoped only to this
-   bucket.
-4. Add a lifecycle rule that expires every object after one day.
-
-The runtime still deletes objects immediately. The lifecycle rule is only crash
-protection.
-
-References:
-
-- [R2 presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/)
-- [Delete R2 objects](https://developers.cloudflare.com/r2/objects/delete-objects/)
-- [R2 lifecycle rules](https://developers.cloudflare.com/r2/buckets/object-lifecycles/)
-
-## 4. Store secrets outside Git
-
-Local secrets are read from the repository-root `.env`, which is ignored by
-Git and must have permission `600`. It contains:
-
-- `INSTAGRAM_USER_ID`
-- `INSTAGRAM_ACCESS_TOKEN`
-- `R2_ACCOUNT_ID`
-- `R2_ACCESS_KEY_ID`
-- `R2_SECRET_ACCESS_KEY`
-
-`R2_ACCESS_TOKEN` is not used by the publisher. The Meta API version and
-`building-intent-social` bucket name are fixed public configuration. Never
-commit `.env`, paste secrets into a Codex chat, or print tokens and presigned
-URLs.
-
-`--cleanup-only` needs only the three `R2_*` credentials. It deliberately does
-not require Instagram credentials.
+`R2_ACCESS_TOKEN` is not used by the publisher. The R2 bucket name is fixed as
+`building-intent-social`. Never commit `.env`, paste its values into chat, or
+print tokens and presigned URLs.
 
 ```bash
 chmod 600 .env
 uv run --env-file .env .venv/bin/python social/publish.py \
-  .social-work/2026-07-30-fina-01/draft.json \
-  .social-work/2026-07-30-fina-01/rendered
+  .social-work/<draft-id>/draft.json \
+  .social-work/<draft-id>/rendered
 ```
 
-Use the approved draft's real path. `uv` parses `.env` without executing it as
-a shell script.
+The R2 objects are deleted immediately after Instagram fetches them. Keep the
+bucket private and retain its one-day lifecycle rule as crash protection.
 
-## Daily operation
+## Approval and recovery
 
-The recurring Codex task follows `PROMPT.md`:
-
-```text
-content proposal
-→ 콘텐츠 승인
-→ scene planning and image generation
-→ completed carousel
-→ 승인
-→ R2 staging
-→ Instagram publish
-→ verified R2 cleanup
-```
-
-The content proposal directory must contain no generated image before
-`콘텐츠 승인`. Record and approve that content before adding art details:
+The proposed content review includes the slide copy, caption, comment keyword,
+promise, and exact private reply. All of them are locked by `콘텐츠 승인`.
+The caption contains the keyword but not a raw App Store URL.
 
 ```bash
 .venv/bin/python social/render.py record-content .social-work/<draft-id>/draft.json
 .venv/bin/python social/render.py approve-content .social-work/<draft-id>/draft.json
-.venv/bin/python social/render.py render .social-work/<draft-id>/draft.json --output .social-work/<draft-id>/rendered
+.venv/bin/python social/render.py render \
+  .social-work/<draft-id>/draft.json \
+  --output .social-work/<draft-id>/rendered
 ```
 
-After content approval, plan distinct scenes and generate the text-free art,
-then render and inspect the carousel. Each rendered state records the canonical
-render-ready draft fingerprint and ordered JPEG SHA-256 hashes. Final `승인`
-binds to that exact carousel, and publication rechecks both before upload.
-
-Image-only feedback stays on the same content-approved draft:
+If Instagram publishing succeeds but Worker rule registration fails, do not
+publish again. Retry only the registration:
 
 ```bash
-.venv/bin/python social/publish.py --record-state image-revised .social-work/<draft-id>/draft.json
+uv run --env-file .env .venv/bin/python social/publish.py \
+  --register-rule-only .social-work/<draft-id>/draft.json
 ```
 
-Rerender and present the fresh carousel after this event. Copy feedback instead
-records terminal `revised`, uses a new draft ID, and restarts content approval.
+`publishing` is intentionally blocked because Instagram may have accepted the
+request without returning a safely recorded media ID. Reconcile that post
+before retrying.
 
-Runtime state, content fingerprints, render manifests, and scene plans live in
-ignored `.social-work/history.jsonl`. Tracked `social/history.jsonl` receives
-only sanitized `published` metadata after Instagram succeeds. Never move
-pending or rendered events into the tracked ledger.
+## Cloudflare Worker and D1
 
-Content-state changes, rendering, image/copy revisions, final approval, and
-publication share one per-draft filesystem lock. Publication holds that lock
-through R2 cleanup so reviewed JPEGs cannot be replaced during an upload.
+The Worker source is in `social/webhook`. It verifies Meta's request signature,
+matches only the whole normalized keyword, ignores self-comments, and records
+each comment ID before sending so webhook retries cannot send duplicates.
 
-`publishing` is an intentionally blocked state. It means the publish request may
-have succeeded without a safely recorded media ID, so automatic retry could
-create a duplicate. Reconcile that container in Instagram before continuing.
+After logging in to Cloudflare:
+
+```bash
+cd social/webhook
+npm install
+npx wrangler d1 create building-intent-instagram
+```
+
+Copy the returned database ID into the `d1_databases` binding in
+`wrangler.jsonc`, then run:
+
+```bash
+npx wrangler d1 execute building-intent-instagram \
+  --remote --file schema.sql
+npx wrangler secret put INSTAGRAM_ACCESS_TOKEN
+npx wrangler secret put INSTAGRAM_USER_ID
+npx wrangler secret put META_APP_SECRET
+npx wrangler secret put INSTAGRAM_WEBHOOK_VERIFY_TOKEN
+npx wrangler secret put INSTAGRAM_WEBHOOK_ADMIN_TOKEN
+npm test
+npx wrangler deploy
+```
+
+The Worker free plan currently allows 100,000 requests per day and 10 ms of CPU
+time per HTTP request. D1 free usage currently includes 5 million rows read and
+100,000 rows written per day, with a 500 MB limit per database. This design uses
+one rule row per post and one delivery row per matching comment, not one Worker
+route or code rule per post.
+
+References:
+
+* [Cloudflare Worker limits](https://developers.cloudflare.com/workers/platform/limits/)
+* [Cloudflare D1 limits](https://developers.cloudflare.com/d1/platform/limits/)
+* [Cloudflare Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/)
+
+## Meta setup
+
+The connected Instagram professional account needs:
+
+```text
+instagram_business_basic
+instagram_business_content_publish
+instagram_business_manage_comments
+```
+
+In the Meta app's Instagram API settings:
+
+1. Set the callback URL to the deployed Worker URL ending in
+   `/instagram/webhook`.
+2. Enter the same value stored as `INSTAGRAM_WEBHOOK_VERIFY_TOKEN`.
+3. Subscribe the account to the `comments` webhook field.
+4. Generate a fresh access token containing the required permissions if the
+   existing token predates the comments permission.
+
+Meta allows one private reply to a commenter within seven days of the comment.
+The system therefore sends the complete approved message in one response.
+
+References:
+
+* [Meta private replies](https://www.postman.com/meta/instagram/request/23987686-189d7215-22b3-403f-b2f5-a46c7e66a514)
+* [Meta comment webhook](https://www.postman.com/meta/instagram/request/23987686-db99ce99-bf76-475c-8b76-718576c11cae)
+* [Subscribe an Instagram account to webhooks](https://www.postman.com/meta/instagram/request/23987686-0223707a-7035-46a2-8015-1fdf7249278f)

@@ -2,5 +2,14 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "building-intent-instagram-webhook",
   "main": "worker.js",
-  "compatibility_date": "2026-07-30"
+  "compatibility_date": "2026-07-30",
+  "secrets": {
+    "required": [
+      "INSTAGRAM_ACCESS_TOKEN",
+      "INSTAGRAM_USER_ID",
+      "META_APP_SECRET",
+      "INSTAGRAM_WEBHOOK_VERIFY_TOKEN",
+      "INSTAGRAM_WEBHOOK_ADMIN_TOKEN"
+    ]
+  }
 }

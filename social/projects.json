@@ -1,8 +1,4 @@
 {
-  "schedule": {
-    "timezone": "America/Vancouver",
-    "slots": ["08:00"]
-  },
   "formats": [
     "ways-checklist",
     "mistake-fix",
