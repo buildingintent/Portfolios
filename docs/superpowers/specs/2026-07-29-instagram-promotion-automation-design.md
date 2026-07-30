@@ -6,14 +6,15 @@
 
 ## Goal
 
-Create one English Instagram carousel proposal every day at 8:00 AM
-America/Vancouver time. The account tells relatable stories through one
-recurring fictional family. Some stories stand alone, while stories that
-naturally overlap an app problem connect to that app on the final slide.
-Codex first sends the exact slide-by-slide copy and caption to this Codex task.
-It generates the illustrations only after explicit content approval, sends the
-completed carousel for a second approval, and publishes through the Instagram
-API immediately after final approval.
+Create one English Instagram carousel proposal whenever the user sends
+`오늘 루틴 시작` in this Codex task. The account tells relatable stories
+through one recurring fictional family. Some stories stand alone, while
+stories that naturally overlap an app problem connect to that app on the final
+slide. Codex researches, selects, and transforms the source material before
+sending the exact slide-by-slide copy and caption. It generates the
+illustrations only after explicit content approval, sends the completed
+carousel for a second approval, and publishes through the Instagram API
+immediately after final approval.
 
 The system must be safe to keep in this public repository. No credential,
 access token, generated presigned URL, or unpublished draft is committed.
@@ -22,7 +23,8 @@ access token, generated presigned URL, or unpublished draft is committed.
 
 - Use one Instagram account for family-led stories and app-led educational
   posts.
-- Start with one post per day. Additional daily slots can be added later.
+- Do not use a recurring schedule. One `오늘 루틴 시작` command starts one
+  proposal, and the user may start another routine whenever needed.
 - Generate English content only.
 - Require two explicit approvals in this Codex task. `콘텐츠 승인` locks the
   slide copy and permits image generation. `승인` publishes the latest
@@ -77,6 +79,41 @@ An app bridge is allowed only when all of these are true:
 Otherwise the post remains standalone. The planner never inserts an unrelated
 app merely to satisfy a promotional quota.
 
+## Family Story Research
+
+The user does not research or shortlist story material. Codex performs the
+entire research and selection step after `오늘 루틴 시작`.
+
+For a family-led premise, Codex:
+
+1. Uses normal web research to inspect recent and historically popular public
+   discussions from a small allowlist of family-oriented communities.
+2. Reviews popularity, comment activity, relatability, visual potential,
+   brand safety, and similarity to recent account history.
+3. Extracts only broad situations and reasons people found them funny. It does
+   not reuse distinctive wording, a recognizable event sequence, or a source's
+   punchline.
+4. Combines multiple signals into a new fictional event for the recurring
+   family, with an original setting, dialogue, escalation, and ending.
+5. Checks whether the finished story naturally qualifies for an app bridge.
+6. Falls back to an app education proposal when no strong, safe family premise
+   is available.
+
+Initial research sources may include `r/toddlers`, `r/daddit`, `r/Parenting`,
+`r/Mommit`, `r/thingsmykidsaid`, and relevant `r/CasualConversation`
+discussions. Conflict-driven forums and stories involving trauma, illness,
+abuse, bullying, death, sexual material, identifiable children, or private
+family details are ineligible.
+
+Research uses Codex web search, not a custom scraper or bulk Reddit ingestion.
+The system does not add Reddit API integration unless Reddit grants written
+commercial permission for the exact use case.
+
+The local ignored draft records source URLs, coarse popularity signals,
+abstracted motifs, safety decisions, and the original transformation. It does
+not retain usernames or full source text. Published history keeps only the
+resulting premise tags needed to prevent repetition.
+
 ## Audience and Positioning
 
 ### Say Better
@@ -111,28 +148,33 @@ or present generic carousel content as personalized financial advice.
 
 The system has four stages and no custom web UI or database.
 
-### 1. Daily content proposal
+### 1. User-triggered research and content proposal
 
-A Codex recurring automation wakes this task at 8:00 AM America/Vancouver.
-Codex:
+The exact command `오늘 루틴 시작` starts the routine. Codex:
 
 1. Reads the family profile, active project profiles, editorial weights, and
    publication history.
 2. Selects a family-led or app-led premise using the soft editorial mix and
    recent history.
-3. For a family-led premise, checks whether it qualifies for a natural app
-   bridge. If several apps qualify, it chooses the least recently promoted one.
-   For an app-led premise, it starts with the least recently promoted eligible
-   app.
+3. For a family-led premise, performs the research and original transformation
+   defined above, then checks whether it qualifies for a natural app bridge. If
+   several apps qualify, it chooses the least recently promoted one. For an
+   app-led premise, it starts with the least recently promoted eligible app.
 4. Selects a hook, storytelling format, and resulting slide count.
 5. Writes the exact English headline and body for every numbered slide.
 6. Writes the matching Instagram caption.
-7. Sends only this content proposal to the task. No image is generated.
+7. Sends the concise research basis and content proposal to the task. No image
+   is generated.
 
 The approval message uses this stable structure:
 
 ```text
 Mode, app connection, topic, format, and total slide count
+Research basis
+Popular theme
+Why it resonated
+Source links
+Original transformation
 Slide 1 — role
 Headline
 Body
@@ -215,8 +257,8 @@ The initial library contains 18 storytelling formats:
 Selection rules:
 
 - A format used in the previous 14 days is ineligible.
-- Before adding more daily slots, expand the library so it still contains at
-  least 14 days of eligible structures at the new posting frequency.
+- Before increasing posting frequency, expand the library so recent posts can
+  still avoid structural repetition.
 - The planner compares the proposed hook, promise, and example with recent
   history and rejects a close repetition.
 - Every slide before an app CTA must work without mentioning the product.
@@ -227,10 +269,6 @@ Selection rules:
 - Claims must be supported by the slide content.
 - The caption must match the approved slides and may not introduce unsupported
   claims.
-
-The initial schedule contains one 8:00 AM slot. Future frequency increases are
-made by adding explicit schedule slots, rather than changing the content
-engine.
 
 ## Visual System
 
@@ -328,8 +366,7 @@ The implementation should remain small:
 
 - `social/README.md` — setup and operating instructions.
 - `social/projects.json` — public family profile, editorial weights, project
-  profiles, schedule slots, logo paths, positioning, audience problems, and
-  App Store URLs.
+  profiles, logo paths, positioning, audience problems, and App Store URLs.
 - `social/PROMPT.md` — content and image-generation rules used by Codex.
 - `social/render.py` — deterministic Pillow composition and validation.
 - `social/publish.py` — R2 staging, Instagram publication, cleanup, and history.
@@ -448,12 +485,16 @@ external account and lifecycle checks are complete.
 - Reels, Stories, ads, comments, and direct-message automation.
 - Automatic posting without explicit chat approval.
 - App UI screenshot capture.
-- More than one daily slot until additional project volume requires it.
+- Recurring or time-based scheduling.
 - Performance analytics changing future content; publication history is kept
   so this can be added later when there is enough data.
 
 ## Primary References
 
+- [Reddit: developer platform and commercial data access](https://support.reddithelp.com/hc/en-us/articles/14945211791892-Developer-Platform-Accessing-Reddit-Data)
+- [Reddit Data API Terms](https://redditinc.com/policies/data-api-terms)
+- [U.S. Copyright Office: ideas and expression](https://www.copyright.gov/help/faq/faq-protect.html)
+- [U.S. Copyright Office: derivative works](https://www.copyright.gov/eco/help-limitation.html)
 - [Meta: create an image container](https://www.postman.com/meta/instagram/request/23987686-f4b5a72d-a125-4080-8968-93de1a549e68)
 - [Meta: publish a container](https://www.postman.com/meta/instagram/request/23987686-299b176b-90aa-4d8a-b6cf-e6028fc69de5)
 - [Meta: Instagram API with Instagram Login](https://www.postman.com/meta/instagram/folder/23987686-98bfade9-3736-4738-8b4a-f56d6534f6de)
