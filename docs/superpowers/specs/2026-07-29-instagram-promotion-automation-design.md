@@ -248,8 +248,9 @@ The implementation should remain small:
 - `social/PROMPT.md` — content and image-generation rules used by Codex.
 - `social/render.py` — deterministic Pillow composition and validation.
 - `social/publish.py` — R2 staging, Instagram publication, cleanup, and history.
-- `social/history.jsonl` — append-only, non-secret draft and publication
-  history.
+- `social/history.jsonl` — append-only, publication-safe `published` metadata.
+- `.social-work/history.jsonl` — ignored local approval, render-manifest,
+  cleanup, and scene-plan history.
 - `social/assets/` — approved logos and the official App Store badge.
 
 Unpublished content proposals, scene plans, generated art, and rendered output
@@ -318,9 +319,16 @@ or a revision/hold terminal state from either approval gate.
 Publication records the final Instagram media ID before reporting success.
 Retries inspect history first:
 
+- Content drafting records the fingerprint of the displayed copy; content
+  approval rejects any mismatch.
+- Every rendered event records the canonical render-ready draft fingerprint
+  and ordered JPEG SHA-256 hashes. Final approval and publication both reject
+  any mismatch.
 - Images cannot be generated before `content_approved`.
 - Publication cannot start before the separate final `approved` event.
 - A published draft is never published again.
+- One per-draft filesystem lock covers content-state changes, rendering,
+  image/copy revisions, final approval, publication, and staging cleanup.
 - A partial child-container failure never creates a parent carousel.
 - A parent container is published once.
 - If Instagram publication succeeds but R2 deletion fails, only cleanup is
@@ -345,6 +353,9 @@ Keep verification proportional to the small implementation:
 5. Setup concludes with one explicitly approved end-to-end test carousel on
    the new professional account, followed by verification that the R2 prefix is
    empty.
+
+The source implementation is not production-verified until step 5 and the
+external account and lifecycle checks are complete.
 
 ## Out of Scope for V1
 

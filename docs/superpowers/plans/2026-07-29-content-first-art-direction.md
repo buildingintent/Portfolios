@@ -1,10 +1,23 @@
 # Content-First Art Direction Implementation Plan
 
+**Post-review note:** The final fix wave moved all pre-publication state and
+scene data to ignored `.social-work/history.jsonl`, left tracked
+`social/history.jsonl` published-only, and bound approvals to content,
+render-ready draft, and ordered JPEG fingerprints. `social/README.md` is the
+current operating contract.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Require slide-by-slide content approval before image generation, then render each approved carousel as unique full-bleed art with scene-specific text placement before a separate final publication approval.
 
-**Architecture:** Keep the existing JSONL history, Pillow renderer, R2 staging, and Instagram publisher. Split validation into content-only and render-ready phases, add explicit content approval and rendered events, and replace the fixed illustration-card renderer with full-bleed images plus per-slide text regions. The Codex prompt remains the creative director; Python validates state and renders exact approved copy.
+**Architecture:** Keep the existing JSONL helpers, Pillow renderer, R2 staging,
+and Instagram publisher. Runtime state lives in ignored
+`.social-work/history.jsonl`; tracked `social/history.jsonl` is published-only.
+Split validation into content-only and render-ready phases, add explicit
+content approval and rendered events, and replace the fixed illustration-card
+renderer with full-bleed images plus per-slide text regions. The Codex prompt
+remains the creative director; Python validates state and renders exact
+approved copy.
 
 **Tech Stack:** Python 3 standard library, Pillow, unittest, existing boto3 publisher, Codex built-in image generation
 
@@ -1004,7 +1017,7 @@ git commit -m "docs: split content and carousel approvals"
 
 **Files:**
 - Modify locally only: `.social-work/<new-draft-id>/draft.json`
-- Modify runtime history: `social/history.jsonl`
+- Modify runtime history: `.social-work/history.jsonl`
 
 **Interfaces:**
 - Consumes: completed Tasks 1–3

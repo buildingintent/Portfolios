@@ -6,7 +6,8 @@ before publication. Never publish automatically.
 
 ## Before drafting
 
-1. Read `social/projects.json` and recent `rendered` and publication events in
+1. Read `social/projects.json`, recent local `rendered` events in
+   `.social-work/history.jsonl`, and published events in
    `social/history.jsonl`.
 2. Stop and report any latest `cleanup_failed` or `publishing` event. Do not
    draft while publication state is unresolved.
@@ -82,8 +83,9 @@ After exact `콘텐츠 승인`, run:
 Create a fresh art direction for this carousel and a different,
 content-specific scene plan for each non-CTA slide. Read recent `rendered`
 history events and reject any substantially similar `art_direction` or scenes.
-Add top-level `art_direction`, and add `scene`, `illustration`, `alt_text`, and
-`text_layout` to every non-CTA slide.
+Add top-level `art_direction`. Add `scene`, `illustration`, and `text_layout`
+to every non-CTA slide, and add meaningful `alt_text` to every slide including
+the CTA.
 
 Use the built-in Codex image model, not an image API or SDK. Generate
 full-bleed, text-free art beside `draft.json` using each slide's exact
@@ -99,6 +101,73 @@ illustration filename.
   and meaningless props. Never include text, letters, numbers, logos, app UI,
   phone UI, bank screens, financial account data, watermarks, or identifiable
   Apple devices. Do not imply fictional amounts or accounts are real.
+
+## Render-ready draft shape
+
+Each non-CTA `text_layout` has `headline` and `body` regions. A region uses
+integer `box` coordinates `[x1, y1, x2, y2]` inside the 48 px safe inset,
+avoids the slide-number rectangle `[954, 1266, 1052, 1322]`, and does not
+overlap the other region after rotation. Headline `font_size` is 52–104; body
+is 30–60.
+`align` is `left`, `center`, or `right`; `color` and `background` are
+`#RRGGBB` values with at least 4.5:1 contrast; and integer `rotation` is
+-12 through 12. The background is the deterministic contrast treatment for
+that scene-specific region, not a fixed carousel template.
+
+```json
+{
+  "draft_id": "2026-07-30-fina-01",
+  "project_id": "fina",
+  "format_id": "what-happens-next",
+  "hook": "Your balance looks fine. Next Tuesday might not.",
+  "caption": "A balance is a snapshot. Find Fina through the link in bio or on the App Store: https://apps.apple.com/us/app/fina-financial-companion/id6778169653",
+  "art_direction": "Hand-inked editorial scenes on warm paper with sage accents",
+  "slides": [
+    {
+      "kind": "hook",
+      "headline": "Your balance looks fine.",
+      "body": "Next Tuesday might not.",
+      "illustration": "art-01.png",
+      "scene": "A kitchen calendar occupies the left foreground while a person studies it from the right.",
+      "alt_text": "A person looking ahead at approaching bills on a kitchen calendar.",
+      "text_layout": {
+        "headline": {"box": [64, 80, 1016, 310], "font_size": 78, "align": "left", "color": "#171512", "background": "#FFFDF8", "rotation": 0},
+        "body": {"box": [64, 350, 900, 530], "font_size": 44, "align": "left", "color": "#171512", "background": "#FFFDF8", "rotation": 0}
+      }
+    },
+    {
+      "kind": "content",
+      "headline": "Today",
+      "body": "Some of that balance is already spoken for.",
+      "illustration": "art-02.png",
+      "scene": "Labeled envelopes form a diagonal path below a floating balance card.",
+      "alt_text": "Envelopes beside a current balance.",
+      "text_layout": {
+        "headline": {"box": [64, 120, 760, 350], "font_size": 78, "align": "left", "color": "#171512", "background": "#FFFDF8", "rotation": 0},
+        "body": {"box": [64, 470, 900, 650], "font_size": 44, "align": "left", "color": "#171512", "background": "#FFFDF8", "rotation": 0}
+      }
+    },
+    {
+      "kind": "content",
+      "headline": "Next Tuesday",
+      "body": "Two automatic payments arrive together.",
+      "illustration": "art-03.png",
+      "scene": "Two paper bill notices converge on one Tuesday square in a large wall calendar.",
+      "alt_text": "Two bills landing on one calendar date.",
+      "text_layout": {
+        "headline": {"box": [64, 670, 1016, 900], "font_size": 78, "align": "left", "color": "#171512", "background": "#FFFDF8", "rotation": 0},
+        "body": {"box": [64, 960, 900, 1140], "font_size": 44, "align": "left", "color": "#171512", "background": "#FFFDF8", "rotation": 0}
+      }
+    },
+    {
+      "kind": "cta",
+      "headline": "See it coming with Fina.",
+      "body": "Forecast upcoming pressure before it becomes a problem.",
+      "alt_text": "Fina logo and a Download on the App Store badge."
+    }
+  ]
+}
+```
 
 ## Render, inspect, and wait
 
@@ -129,15 +198,18 @@ containers before final approval.
   ```
 
   Report the Instagram media ID and confirm the R2 prefix is empty.
-- Revision feedback: run `.venv/bin/python social/publish.py --record-state
-  revised .social-work/<draft-id>/draft.json`, update only the affected
-  rendered slides, and present it again. Copy changes create the next revision
-  ID and restart at content approval. Do not publish.
+- Image-only feedback: run `.venv/bin/python social/publish.py --record-state
+  image-revised .social-work/<draft-id>/draft.json`, update only the affected
+  art or layout, rerender the same draft, and present the fresh carousel.
+- Copy feedback: run `.venv/bin/python social/publish.py --record-state revised
+  .social-work/<draft-id>/draft.json`, create the next revision ID, and restart
+  at content approval. Do not publish.
 - `보류`: run `.venv/bin/python social/publish.py --record-state held
   .social-work/<draft-id>/draft.json` and do not publish.
 - If multiple drafts await a decision, require the displayed draft ID with the
   approval.
 - If publication reports `cleanup_failed`, run `uv run --env-file .env
   .venv/bin/python social/publish.py --cleanup-only <draft-id>` before any new
-  draft. If it stops in `publishing`, do not retry: report the container ID and
-  require manual Instagram reconciliation to avoid a duplicate post.
+  draft; this command requires only the R2 credentials. If it stops in
+  `publishing`, do not retry: report the container ID and require manual
+  Instagram reconciliation to avoid a duplicate post.

@@ -10,6 +10,10 @@ Approved JPEGs are briefly exposed through private Cloudflare R2 presigned URLs
 because Instagram must fetch each image from a URL. The objects are deleted and
 the prefix is verified empty after every success or failure.
 
+This source workflow is not production-verified yet. A user-approved visual,
+external account/lifecycle checks, and one explicitly approved end-to-end
+publication remain release checkpoints.
+
 ## 1. Install locally
 
 From the repository root:
@@ -87,6 +91,9 @@ Git and must have permission `600`. It contains:
 commit `.env`, paste secrets into a Codex chat, or print tokens and presigned
 URLs.
 
+`--cleanup-only` needs only the three `R2_*` credentials. It deliberately does
+not require Instagram credentials.
+
 ```bash
 chmod 600 .env
 uv run --env-file .env .venv/bin/python social/publish.py \
@@ -122,8 +129,27 @@ The content proposal directory must contain no generated image before
 ```
 
 After content approval, plan distinct scenes and generate the text-free art,
-then render and inspect the carousel. Final `승인` publishes once, then deletes
-and verifies the R2 prefix.
+then render and inspect the carousel. Each rendered state records the canonical
+render-ready draft fingerprint and ordered JPEG SHA-256 hashes. Final `승인`
+binds to that exact carousel, and publication rechecks both before upload.
+
+Image-only feedback stays on the same content-approved draft:
+
+```bash
+.venv/bin/python social/publish.py --record-state image-revised .social-work/<draft-id>/draft.json
+```
+
+Rerender and present the fresh carousel after this event. Copy feedback instead
+records terminal `revised`, uses a new draft ID, and restarts content approval.
+
+Runtime state, content fingerprints, render manifests, and scene plans live in
+ignored `.social-work/history.jsonl`. Tracked `social/history.jsonl` receives
+only sanitized `published` metadata after Instagram succeeds. Never move
+pending or rendered events into the tracked ledger.
+
+Content-state changes, rendering, image/copy revisions, final approval, and
+publication share one per-draft filesystem lock. Publication holds that lock
+through R2 cleanup so reviewed JPEGs cannot be replaced during an upload.
 
 `publishing` is an intentionally blocked state. It means the publish request may
 have succeeded without a safely recorded media ID, so automatic retry could

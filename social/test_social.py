@@ -1,21 +1,31 @@
 import copy
+import hashlib
+import io
 import json
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from contextlib import redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 from urllib.parse import parse_qs
 from zoneinfo import ZoneInfo
 
 from PIL import Image
 
 from social.render import (
+    HISTORY_PATH,
+    PUBLIC_HISTORY_PATH,
     assert_renderable,
+    content_fingerprint,
     load_json,
     latest_event,
+    main as render_main,
     mark_rendered,
     read_events,
     record_content_state,
@@ -34,8 +44,12 @@ from social.publish import (
     append_event,
     assert_publishable,
     cleanup_only,
+    draft_lock,
+    load_r2_env,
     load_required_env,
+    main as publish_main,
     publish,
+    record_image_revision,
     record_terminal,
     verify_rendered,
 )
@@ -48,6 +62,7 @@ def text_layout(headline_y=80, body_y=350):
             "font_size": 78,
             "align": "left",
             "color": "#171512",
+            "background": "#FFFDF8",
             "rotation": 0,
         },
         "body": {
@@ -55,6 +70,7 @@ def text_layout(headline_y=80, body_y=350):
             "font_size": 44,
             "align": "left",
             "color": "#171512",
+            "background": "#FFFDF8",
             "rotation": 0,
         },
     }
@@ -256,6 +272,61 @@ class DraftValidationTests(unittest.TestCase):
             validate_draft(draft, self.project(), set()),
         )
 
+    def test_rejects_text_regions_that_overlap_after_rotation(self):
+        draft = self.valid_draft()
+        layout = draft["slides"][0]["text_layout"]
+        layout["headline"]["box"] = [100, 100, 600, 260]
+        layout["headline"]["rotation"] = 12
+        layout["body"]["box"] = [100, 300, 600, 460]
+        layout["body"]["rotation"] = -12
+
+        self.assertIn(
+            "headline and body text regions must not overlap",
+            validate_draft(draft, self.project(), set()),
+        )
+
+    def test_rejects_text_regions_outside_safe_insets_or_over_number(self):
+        outside = self.valid_draft()
+        outside["slides"][0]["text_layout"]["headline"]["box"] = [
+            0,
+            80,
+            800,
+            260,
+        ]
+        over_number = self.valid_draft()
+        over_number["slides"][0]["text_layout"]["body"]["box"] = [
+            950,
+            1200,
+            1020,
+            1280,
+        ]
+
+        self.assertIn(
+            "text region must stay inside safe margins",
+            validate_draft(outside, self.project(), set()),
+        )
+        self.assertIn(
+            "text region must not overlap the slide number",
+            validate_draft(over_number, self.project(), set()),
+        )
+
+    def test_requires_a_readable_contrast_background(self):
+        missing = self.valid_draft()
+        missing["slides"][0]["text_layout"]["headline"].pop("background")
+        low_contrast = self.valid_draft()
+        low_contrast["slides"][0]["text_layout"]["body"][
+            "background"
+        ] = "#171512"
+
+        self.assertIn(
+            "text background must be #RRGGBB",
+            validate_draft(missing, self.project(), set()),
+        )
+        self.assertIn(
+            "text color must contrast with background",
+            validate_draft(low_contrast, self.project(), set()),
+        )
+
     def test_rejects_unsupported_text_region_values(self):
         draft = self.valid_draft()
         region = draft["slides"][0]["text_layout"]["headline"]
@@ -305,6 +376,19 @@ class DraftValidationTests(unittest.TestCase):
         self.assertEqual(
             validate_illustrations(draft, self.root),
             ["missing illustration: art-03.png"],
+        )
+
+    def test_rejects_symlinked_illustration_escape(self):
+        outside_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(outside_dir.cleanup)
+        outside = Path(outside_dir.name) / "outside.png"
+        outside.write_bytes(b"private image")
+        (self.root / "art-01.png").symlink_to(outside)
+        draft = self.valid_draft()
+
+        self.assertIn(
+            "illustration paths must stay inside the draft directory",
+            validate_illustrations(draft, self.root),
         )
 
     def test_recent_formats_only_returns_recent_published_events(self):
@@ -363,6 +447,26 @@ class DraftValidationTests(unittest.TestCase):
 
         self.assertEqual(draft, before)
 
+    def test_runtime_history_default_is_ignored_and_separate(self):
+        repository = Path(__file__).resolve().parent.parent
+
+        self.assertEqual(
+            HISTORY_PATH,
+            repository / ".social-work" / "history.jsonl",
+        )
+        self.assertEqual(
+            PUBLIC_HISTORY_PATH,
+            repository / "social" / "history.jsonl",
+        )
+        ignored = subprocess.run(
+            ["git", "check-ignore", str(HISTORY_PATH)],
+            cwd=repository,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(ignored.returncode, 0)
+
 
 class RenderTests(unittest.TestCase):
     def setUp(self):
@@ -400,6 +504,40 @@ class RenderTests(unittest.TestCase):
     @staticmethod
     def valid_draft():
         return DraftValidationTests.valid_draft()
+
+    def render_case(self):
+        draft = self.valid_draft()
+        draft_path = self.work_dir / "draft.json"
+        draft_path.write_text(json.dumps(draft), encoding="utf-8")
+        config_path = self.work_dir / "projects.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "formats": ["what-happens-next"],
+                    "projects": [self.project()],
+                }
+            ),
+            encoding="utf-8",
+        )
+        history_path = self.work_dir / "history.jsonl"
+        proposed = content_only_draft()
+        record_content_state(
+            proposed,
+            "content_drafted",
+            history_path,
+        )
+        record_content_state(
+            proposed,
+            "content_approved",
+            history_path,
+        )
+        outputs = render_file(
+            draft_path,
+            self.output_dir,
+            config_path=config_path,
+            history_path=history_path,
+        )
+        return draft, draft_path, config_path, outputs, history_path
 
     def test_render_outputs_numbered_1080_by_1350_jpegs(self):
         outputs = render_draft(
@@ -481,6 +619,31 @@ class RenderTests(unittest.TestCase):
         with Image.open(first_path) as a, Image.open(second_path) as b:
             self.assertNotEqual(a.tobytes(), b.tobytes())
 
+    def test_text_region_renders_its_contrast_background(self):
+        slide = self.valid_draft()["slides"][0]
+        headline = slide["text_layout"]["headline"]
+        headline["background"] = "#171512"
+        headline["color"] = "#FFFFFF"
+
+        output = render_slide(
+            slide,
+            self.project(),
+            1,
+            4,
+            self.work_dir,
+            self.output_dir / "contrast.jpg",
+        )
+
+        with Image.open(output) as image:
+            pixel = image.getpixel((990, 290))
+        self.assertLess(
+            sum(
+                abs(channel - expected)
+                for channel, expected in zip(pixel, (23, 21, 18))
+            ),
+            30,
+        )
+
     def test_rejects_copy_that_cannot_fit_safe_area(self):
         draft = self.valid_draft()
         draft["slides"][1]["headline"] = "word " * 80
@@ -549,6 +712,27 @@ class RenderTests(unittest.TestCase):
                 ),
             ],
         )
+        expected_draft_hash = hashlib.sha256(
+            json.dumps(
+                self.valid_draft(),
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        self.assertEqual(
+            events[-1].get("draft_fingerprint"),
+            expected_draft_hash,
+        )
+        self.assertEqual(
+            events[-1].get("rendered_files"),
+            [
+                {
+                    "name": path.name,
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                }
+                for path in sorted(self.output_dir.glob("*.jpg"))
+            ],
+        )
 
     def test_render_file_rejects_content_changed_after_approval(self):
         draft_path = self.work_dir / "draft.json"
@@ -589,6 +773,105 @@ class RenderTests(unittest.TestCase):
                 config_path=config_path,
                 history_path=history_path,
             )
+
+    def test_render_cli_reports_gate_and_file_errors_cleanly(self):
+        for error in (
+            RuntimeError("content approval required"),
+            OSError("illustration unreadable"),
+        ):
+            output = io.StringIO()
+            with (
+                patch("social.render.render_file", side_effect=error),
+                patch(
+                    "sys.argv",
+                    [
+                        "render.py",
+                        "render",
+                        "draft.json",
+                        "--output",
+                        "rendered",
+                    ],
+                ),
+                redirect_stdout(output),
+            ):
+                result = render_main()
+
+            self.assertEqual(result, 2)
+            self.assertEqual(output.getvalue().strip(), str(error))
+
+    def test_final_approval_rejects_draft_changed_after_render(self):
+        draft, _draft_path, _config_path, outputs, history = self.render_case()
+        draft["caption"] += " Changed after the carousel was displayed."
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "rendered carousel does not match draft",
+        ):
+            approve(draft, outputs, history)
+
+    def test_final_approval_rejects_jpeg_changed_after_render(self):
+        draft, _draft_path, _config_path, outputs, history = self.render_case()
+        Image.new("RGB", (1080, 1350), "black").save(outputs[0])
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "rendered carousel does not match files",
+        ):
+            approve(draft, outputs, history)
+
+    def test_image_revision_is_recorded_before_replacing_displayed_files(self):
+        draft, draft_path, config_path, outputs, history = self.render_case()
+        before = hashlib.sha256(outputs[0].read_bytes()).hexdigest()
+        draft["slides"][0]["text_layout"] = text_layout(720, 980)
+        draft_path.write_text(json.dumps(draft), encoding="utf-8")
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "image revision required before rerendering",
+        ):
+            render_file(
+                draft_path,
+                self.output_dir,
+                config_path=config_path,
+                history_path=history,
+            )
+
+        self.assertEqual(
+            hashlib.sha256(outputs[0].read_bytes()).hexdigest(),
+            before,
+        )
+        record_image_revision(draft, history)
+        render_file(
+            draft_path,
+            self.output_dir,
+            config_path=config_path,
+            history_path=history,
+        )
+        self.assertEqual(
+            [event["event"] for event in read_events(history)],
+            [
+                "content_drafted",
+                "content_approved",
+                "rendered",
+                "image_revised",
+                "rendered",
+            ],
+        )
+
+    def test_render_cannot_start_while_draft_operation_is_locked(self):
+        draft, draft_path, config_path, _outputs, history = self.render_case()
+
+        with draft_lock(history, draft["draft_id"]):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "draft operation already in progress",
+            ):
+                render_file(
+                    draft_path,
+                    self.output_dir,
+                    config_path=config_path,
+                    history_path=history,
+                )
 
 
 class PublicationStateTests(unittest.TestCase):
@@ -704,6 +987,25 @@ class PublicationStateTests(unittest.TestCase):
             assert_renderable("d1", read_events(self.history))
         )
 
+    def test_content_approval_rejects_copy_changed_since_display(self):
+        draft = content_only_draft()
+        record_content_state(draft, "content_drafted", self.history)
+        draft["slides"][0]["headline"] = "Changed after presentation."
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "displayed content does not match draft",
+        ):
+            record_content_state(
+                draft,
+                "content_approved",
+                self.history,
+            )
+
+        events = read_events(self.history)
+        self.assertEqual([event["event"] for event in events], ["content_drafted"])
+        self.assertRegex(events[0]["content_fingerprint"], r"^[0-9a-f]{64}$")
+
     def test_final_approval_requires_rendered_event(self):
         draft = {
             "draft_id": "d1",
@@ -717,16 +1019,19 @@ class PublicationStateTests(unittest.TestCase):
         }
         record_content_state(draft, "content_drafted", self.history)
         record_content_state(draft, "content_approved", self.history)
+        files = [self.root / "01.jpg", self.root / "02.jpg"]
+        for index, path in enumerate(files, start=1):
+            path.write_bytes(f"slide-{index}".encode())
 
         with self.assertRaisesRegex(
             RuntimeError,
             "rendered carousel required",
         ):
-            approve(draft, self.history)
+            approve(draft, files, self.history)
 
-        mark_rendered(draft, self.history)
-        approve(draft, self.history)
-        approve(draft, self.history)
+        mark_rendered(draft, files, self.history)
+        approve(draft, files, self.history)
+        approve(draft, files, self.history)
         self.assertEqual(
             [event["event"] for event in read_events(self.history)],
             [
@@ -777,22 +1082,118 @@ class PublicationStateTests(unittest.TestCase):
                 "revised",
             )
 
+    def test_image_revision_appends_a_fresh_rendered_manifest(self):
+        draft = {
+            "draft_id": "d1",
+            "project_id": "fina",
+            "format_id": "what-happens-next",
+            "art_direction": "Warm paper texture",
+            "slides": [
+                {"kind": "hook", "scene": "A person planning ahead"},
+                {"kind": "cta"},
+            ],
+        }
+        files = [self.root / "01.jpg", self.root / "02.jpg"]
+        for index, path in enumerate(files, start=1):
+            path.write_bytes(f"first-{index}".encode())
+        record_content_state(draft, "content_drafted", self.history)
+        record_content_state(draft, "content_approved", self.history)
+        mark_rendered(draft, files, self.history)
+        approve(draft, files, self.history)
+
+        record_image_revision(draft, self.history)
+        for index, path in enumerate(files, start=1):
+            path.write_bytes(f"second-{index}".encode())
+        mark_rendered(draft, files, self.history)
+        approve(draft, files, self.history)
+
+        events = read_events(self.history)
+        self.assertEqual(
+            [event["event"] for event in events],
+            [
+                "content_drafted",
+                "content_approved",
+                "rendered",
+                "approved",
+                "image_revised",
+                "rendered",
+                "approved",
+            ],
+        )
+        rendered = [
+            event["rendered_files"]
+            for event in events
+            if event["event"] == "rendered"
+        ]
+        self.assertNotEqual(rendered[0], rendered[1])
+
+    def test_image_revision_cli_keeps_the_draft_rerenderable(self):
+        draft = DraftValidationTests.valid_draft()
+        draft_path = self.root / "draft.json"
+        draft_path.write_text(json.dumps(draft), encoding="utf-8")
+        files = [self.root / f"{index:02}.jpg" for index in range(1, 5)]
+        for index, path in enumerate(files, start=1):
+            path.write_bytes(f"slide-{index}".encode())
+        record_content_state(draft, "content_drafted", self.history)
+        record_content_state(draft, "content_approved", self.history)
+        mark_rendered(draft, files, self.history)
+        output = io.StringIO()
+
+        with (
+            patch("social.publish.HISTORY_PATH", self.history),
+            patch(
+                "sys.argv",
+                [
+                    "publish.py",
+                    "--record-state",
+                    "image-revised",
+                    str(draft_path),
+                ],
+            ),
+            redirect_stdout(output),
+        ):
+            self.assertEqual(publish_main(), 0)
+
+        self.assertIn("recorded image-revised", output.getvalue())
+        self.assertEqual(
+            latest_event(
+                draft["draft_id"],
+                read_events(self.history),
+            )["event"],
+            "image_revised",
+        )
+
     def test_approval_is_recorded_once_before_publication(self):
         draft = {
             "draft_id": "d1",
             "project_id": "fina",
             "format_id": "what-happens-next",
         }
+        files = [self.root / "01.jpg"]
+        files[0].write_bytes(b"slide")
         append_event(
             self.history,
             {
                 **draft,
                 "event": "rendered",
+                "draft_fingerprint": hashlib.sha256(
+                    json.dumps(
+                        draft,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                ).hexdigest(),
+                "rendered_files": [
+                    {
+                        "name": "01.jpg",
+                        "sha256": hashlib.sha256(b"slide").hexdigest(),
+                    }
+                ],
             },
         )
 
-        approve(draft, self.history)
-        approve(draft, self.history)
+        approve(draft, files, self.history)
+        approve(draft, files, self.history)
 
         events = read_events(self.history)
         self.assertEqual(
@@ -866,6 +1267,19 @@ class FakeR2:
             key for key in self.remaining_keys
             if not key.startswith(prefix)
         ]
+
+
+class BlockingR2(FakeR2):
+    def __init__(self):
+        super().__init__()
+        self.upload_started = threading.Event()
+        self.release_upload = threading.Event()
+
+    def upload(self, draft_id, files):
+        self.upload_started.set()
+        if not self.release_upload.wait(timeout=5):
+            raise RuntimeError("test upload timed out")
+        return super().upload(draft_id, files)
 
 
 class FakeInstagram:
@@ -964,10 +1378,13 @@ class PublishFlowTests(unittest.TestCase):
         self.addCleanup(self.temp_dir.cleanup)
         self.root = Path(self.temp_dir.name)
         self.history = self.root / "history.jsonl"
+        self.public_history = self.root / "public-history.jsonl"
         self.files = [
             self.root / "01.jpg",
             self.root / "02.jpg",
         ]
+        for index, path in enumerate(self.files, start=1):
+            path.write_bytes(f"slide-{index}".encode())
         self.draft = {
             "draft_id": "d1",
             "project_id": "fina",
@@ -981,6 +1398,22 @@ class PublishFlowTests(unittest.TestCase):
                 "project_id": "fina",
                 "format_id": "what-happens-next",
                 "event": "rendered",
+                "draft_fingerprint": hashlib.sha256(
+                    json.dumps(
+                        self.draft,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                ).hexdigest(),
+                "rendered_files": [
+                    {
+                        "name": path.name,
+                        "sha256": hashlib.sha256(
+                            path.read_bytes()
+                        ).hexdigest(),
+                    }
+                    for path in self.files
+                ],
             },
         )
         self.r2 = FakeR2()
@@ -1004,6 +1437,39 @@ class PublishFlowTests(unittest.TestCase):
         self.assertIn("Slide 1", prompt)
         self.assertIn("Caption", prompt)
 
+    def test_prompt_render_ready_example_validates_and_renders(self):
+        prompt = (
+            Path(__file__).with_name("PROMPT.md")
+            .read_text(encoding="utf-8")
+        )
+        section = prompt.split("## Render-ready draft shape", 1)[1]
+        example = section.split("```json", 1)[1].split("```", 1)[0]
+        draft = json.loads(example)
+
+        self.assertEqual(
+            validate_draft(
+                draft,
+                RenderTests.project(),
+                set(),
+            ),
+            [],
+        )
+        for slide in draft["slides"]:
+            if slide["kind"] != "cta":
+                Image.new("RGB", (1080, 1350), "white").save(
+                    self.root / slide["illustration"]
+                )
+        outputs = render_draft(
+            draft,
+            RenderTests.project(),
+            self.root,
+            self.root / "rendered",
+        )
+        self.assertEqual(
+            [path.name for path in outputs],
+            ["01.jpg", "02.jpg", "03.jpg", "04.jpg"],
+        )
+
     def test_success_publishes_once_and_cleans_prefix(self):
         media_id = publish(
             self.draft,
@@ -1011,6 +1477,7 @@ class PublishFlowTests(unittest.TestCase):
             self.r2,
             self.instagram,
             self.history,
+            public_history=self.public_history,
         )
 
         self.assertEqual(media_id, "media-1")
@@ -1020,6 +1487,193 @@ class PublishFlowTests(unittest.TestCase):
             latest_event("d1", read_events(self.history))["event"],
             "published",
         )
+        public_events = read_events(self.public_history)
+        self.assertEqual(len(public_events), 1)
+        self.assertEqual(
+            {
+                key: value
+                for key, value in public_events[0].items()
+                if key != "at"
+            },
+            {
+                "draft_id": "d1",
+                "project_id": "fina",
+                "format_id": "what-happens-next",
+                "event": "published",
+                "instagram_media_id": "media-1",
+            },
+        )
+
+    def test_public_ledger_blocks_republish_with_recreated_local_state(self):
+        append_event(
+            self.public_history,
+            {
+                "draft_id": "d1",
+                "project_id": "fina",
+                "format_id": "what-happens-next",
+                "event": "published",
+                "instagram_media_id": "existing-media",
+            },
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "already published"):
+            publish(
+                self.draft,
+                self.files,
+                self.r2,
+                self.instagram,
+                self.history,
+                public_history=self.public_history,
+            )
+
+        self.assertEqual(self.instagram.publish_calls, 0)
+        self.assertEqual(self.r2.remaining_keys, [])
+
+    def test_publish_rechecks_jpegs_after_final_approval(self):
+        approve(self.draft, self.files, self.history)
+        self.files[0].write_bytes(b"changed after final approval")
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "rendered carousel does not match files",
+        ):
+            publish(
+                self.draft,
+                self.files,
+                self.r2,
+                self.instagram,
+                self.history,
+            )
+
+        self.assertEqual(self.r2.remaining_keys, [])
+        self.assertEqual(self.instagram.publish_calls, 0)
+
+    def test_concurrent_publish_start_calls_instagram_once(self):
+        first_r2 = BlockingR2()
+        second_r2 = FakeR2()
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(
+                publish,
+                self.draft,
+                self.files,
+                first_r2,
+                self.instagram,
+                self.history,
+            )
+            self.assertTrue(first_r2.upload_started.wait(timeout=2))
+            try:
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "draft operation already in progress",
+                ):
+                    publish(
+                        self.draft,
+                        self.files,
+                        second_r2,
+                        self.instagram,
+                        self.history,
+                    )
+            finally:
+                first_r2.release_upload.set()
+            self.assertEqual(first.result(timeout=5), "media-1")
+
+        self.assertEqual(self.instagram.publish_calls, 1)
+
+    def test_image_revision_cannot_start_during_publish(self):
+        blocking_r2 = BlockingR2()
+        history = self.root / "image-revision-race.jsonl"
+        append_event(
+            history,
+            {
+                **self.draft,
+                "event": "content_approved",
+                "content_fingerprint": content_fingerprint(self.draft),
+            },
+        )
+        append_event(history, read_events(self.history)[-1])
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            publishing = executor.submit(
+                publish,
+                self.draft,
+                self.files,
+                blocking_r2,
+                self.instagram,
+                history,
+            )
+            self.assertTrue(blocking_r2.upload_started.wait(timeout=2))
+            try:
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "draft operation already in progress",
+                ):
+                    record_image_revision(self.draft, history)
+            finally:
+                blocking_r2.release_upload.set()
+            self.assertEqual(publishing.result(timeout=5), "media-1")
+
+        self.assertNotIn(
+            "image_revised",
+            [
+                event["event"]
+                for event in read_events(history)
+            ],
+        )
+
+    def test_terminal_state_cannot_be_recorded_during_publish(self):
+        blocking_r2 = BlockingR2()
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            publishing = executor.submit(
+                publish,
+                self.draft,
+                self.files,
+                blocking_r2,
+                self.instagram,
+                self.history,
+            )
+            self.assertTrue(blocking_r2.upload_started.wait(timeout=2))
+            try:
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "draft operation already in progress",
+                ):
+                    record_terminal(
+                        self.draft,
+                        "held",
+                        self.history,
+                    )
+            finally:
+                blocking_r2.release_upload.set()
+            self.assertEqual(publishing.result(timeout=5), "media-1")
+
+        self.assertNotIn(
+            "held",
+            [
+                event["event"]
+                for event in read_events(self.history)
+            ],
+        )
+
+    def test_recovery_states_report_required_action_before_approval(self):
+        for state, message in (
+            ("cleanup_failed", "cleanup only required"),
+            ("publishing", "manual reconciliation required"),
+        ):
+            with self.subTest(state=state):
+                history = self.root / f"{state}.jsonl"
+                for event in read_events(self.history):
+                    append_event(history, event)
+                append_event(history, {**self.draft, "event": state})
+
+                with self.assertRaisesRegex(RuntimeError, message):
+                    publish(
+                        self.draft,
+                        self.files,
+                        FakeR2(),
+                        FakeInstagram(),
+                        history,
+                    )
 
     def test_child_failure_skips_parent_and_cleans_prefix(self):
         self.instagram.fail_at = "child"
@@ -1127,7 +1781,13 @@ class PublishFlowTests(unittest.TestCase):
     def test_cleanup_after_pre_publish_failure_allows_safe_retry(self):
         self.instagram.fail_at = "child"
         self.r2.fail_cleanup = True
-        with self.assertRaisesRegex(RuntimeError, "child failed"):
+        with self.assertRaisesRegex(
+            RuntimeError,
+            (
+                "^publication failed and staging cleanup failed; "
+                "run --cleanup-only d1$"
+            ),
+        ):
             publish(
                 self.draft,
                 self.files,
@@ -1274,6 +1934,55 @@ class PublishFlowTests(unittest.TestCase):
             },
         )
 
+    def test_cleanup_cli_requires_only_r2_credentials(self):
+        r2_secrets = {
+            "R2_ACCOUNT_ID": "account",
+            "R2_ACCESS_KEY_ID": "access",
+            "R2_SECRET_ACCESS_KEY": "secret",
+        }
+        self.assertEqual(
+            load_r2_env(r2_secrets),
+            {
+                **r2_secrets,
+                "R2_BUCKET": "building-intent-social",
+            },
+        )
+        append_event(
+            self.history,
+            {
+                "draft_id": "cleanup-draft",
+                "project_id": "fina",
+                "format_id": "what-happens-next",
+                "event": "cleanup_failed",
+                "resume_event": "publish_failed",
+            },
+        )
+        output = io.StringIO()
+        with (
+            patch("social.publish.HISTORY_PATH", self.history),
+            patch("social.publish._r2", return_value=self.r2),
+            patch.dict(
+                "social.publish.os.environ",
+                r2_secrets,
+                clear=True,
+            ),
+            patch(
+                "sys.argv",
+                ["publish.py", "--cleanup-only", "cleanup-draft"],
+            ),
+            redirect_stdout(output),
+        ):
+            self.assertEqual(publish_main(), 0)
+
+        self.assertNotIn("INSTAGRAM", output.getvalue())
+        self.assertEqual(
+            latest_event(
+                "cleanup-draft",
+                read_events(self.history),
+            )["event"],
+            "cleanup_completed",
+        )
+
     def test_instagram_invalid_json_does_not_echo_response_body(self):
         def open_url(request, timeout):
             return FakeHTTPResponse(b"private-provider-body")
@@ -1343,8 +2052,11 @@ class PublishFlowTests(unittest.TestCase):
             Image.new("RGB", (1080, 1350), "white").save(
                 rendered_dir / f"{index:02}.jpg"
             )
+        local_history = (
+            isolated_repository / ".social-work" / "history.jsonl"
+        )
         append_event(
-            isolated_repository / "social" / "history.jsonl",
+            local_history,
             {
                 "draft_id": draft["draft_id"],
                 "project_id": draft["project_id"],
@@ -1374,10 +2086,14 @@ class PublishFlowTests(unittest.TestCase):
         )
         self.assertNotIn("ModuleNotFoundError", result.stderr)
         self.assertEqual(
+            read_events(local_history)[-1]["event"],
+            "rendered",
+        )
+        self.assertEqual(
             read_events(
                 isolated_repository / "social" / "history.jsonl"
-            )[-1]["event"],
-            "approved",
+            ),
+            [],
         )
 
 

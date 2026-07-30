@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 import argparse
+import fcntl
 import hashlib
 import json
+import math
 import os
 import re
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -14,7 +17,8 @@ from PIL import Image, ImageColor, ImageDraw, ImageFont, ImageOps
 
 ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "projects.json"
-HISTORY_PATH = ROOT / "history.jsonl"
+PUBLIC_HISTORY_PATH = ROOT / "history.jsonl"
+HISTORY_PATH = ROOT.parent / ".social-work" / "history.jsonl"
 TIMEZONE = ZoneInfo("America/Vancouver")
 CANVAS = (1080, 1350)
 FONT = Path(
@@ -22,7 +26,28 @@ FONT = Path(
     "UbuntuSans[wdth,wght].ttf"
 )
 SAFE = (88, 88, 992, 1262)
+TEXT_SAFE = (48, 48, 1032, 1302)
+NUMBER_PILL = (954, 1266, 1052, 1322)
 BADGE = ROOT / "assets/app-store-badge.png"
+
+
+@contextmanager
+def draft_lock(history: Path, draft_id: str):
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", draft_id):
+        raise ValueError("draft_id is unsafe for locking")
+    lock_dir = history.parent / ".locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    with (lock_dir / f"{draft_id}.lock").open("a+") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise RuntimeError(
+                "draft operation already in progress"
+            ) from None
+        try:
+            yield
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
 
 
 def load_json(path: Path) -> dict:
@@ -77,7 +102,7 @@ def _draft_event(draft: dict, event: str) -> dict:
     }
 
 
-def _content_fingerprint(draft: dict) -> str:
+def content_fingerprint(draft: dict) -> str:
     content = {
         key: value
         for key, value in draft.items()
@@ -108,7 +133,26 @@ def _content_fingerprint(draft: dict) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _assert_approved_content(
+def draft_fingerprint(draft: dict) -> str:
+    encoded = json.dumps(
+        draft,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def rendered_manifest(files: list[Path]) -> list[dict[str, str]]:
+    return [
+        {
+            "name": path.name,
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        }
+        for path in files
+    ]
+
+
+def assert_approved_content(
     draft_id: str,
     events: list[dict],
     content_fingerprint: str,
@@ -129,39 +173,76 @@ def record_content_state(
     state: str,
     history: Path,
 ) -> None:
+    with draft_lock(history, draft["draft_id"]):
+        _record_content_state_locked(draft, state, history)
+
+
+def _record_content_state_locked(
+    draft: dict,
+    state: str,
+    history: Path,
+) -> None:
     if state not in {"content_drafted", "content_approved"}:
         raise ValueError("invalid content state")
     latest = latest_event(draft["draft_id"], read_events(history))
     current = latest.get("event") if latest else None
+    fingerprint = content_fingerprint(draft)
     expected = (
         None if state == "content_drafted" else "content_drafted"
     )
     if current == state:
+        if latest.get("content_fingerprint") != fingerprint:
+            raise RuntimeError("displayed content does not match draft")
         return
     if current != expected:
         raise RuntimeError("invalid content state transition")
+    if (
+        state == "content_approved"
+        and latest.get("content_fingerprint") != fingerprint
+    ):
+        raise RuntimeError("displayed content does not match draft")
     event = _draft_event(draft, state)
-    if state == "content_approved":
-        event["content_fingerprint"] = _content_fingerprint(draft)
+    event["content_fingerprint"] = fingerprint
     append_event(history, event)
 
 
 def assert_renderable(draft_id: str, events: list[dict]) -> None:
     latest = latest_event(draft_id, events)
-    if latest is None or latest.get("event") != "content_approved":
+    if latest is None or latest.get("event") not in {
+        "content_approved",
+        "image_revised",
+    }:
         raise RuntimeError("content approval required")
 
 
-def mark_rendered(draft: dict, history: Path) -> None:
+def mark_rendered(
+    draft: dict,
+    files: list[Path],
+    history: Path,
+) -> None:
+    with draft_lock(history, draft["draft_id"]):
+        _mark_rendered_locked(draft, files, history)
+
+
+def _mark_rendered_locked(
+    draft: dict,
+    files: list[Path],
+    history: Path,
+) -> None:
     events = read_events(history)
     latest = latest_event(draft["draft_id"], events)
     if latest and latest.get("event") == "rendered":
-        return
+        if (
+            latest.get("draft_fingerprint") == draft_fingerprint(draft)
+            and latest.get("rendered_files") == rendered_manifest(files)
+        ):
+            return
+        raise RuntimeError("image revision required before rerendering")
     assert_renderable(draft["draft_id"], events)
-    _assert_approved_content(
+    assert_approved_content(
         draft["draft_id"],
         events,
-        _content_fingerprint(draft),
+        content_fingerprint(draft),
     )
     event = _draft_event(draft, "rendered")
     event["art_direction"] = draft["art_direction"]
@@ -170,6 +251,8 @@ def mark_rendered(draft: dict, history: Path) -> None:
         for slide in draft["slides"]
         if slide["kind"] != "cta"
     ]
+    event["draft_fingerprint"] = draft_fingerprint(draft)
+    event["rendered_files"] = rendered_manifest(files)
     append_event(history, event)
 
 
@@ -364,7 +447,10 @@ def validate_draft(
                 and isinstance(body, dict)
                 and "text region must stay inside the canvas"
                 not in headline_errors + body_errors
-                and _boxes_overlap(headline["box"], body["box"])
+                and _boxes_overlap(
+                    _composed_text_box(headline),
+                    _composed_text_box(body),
+                )
             ):
                 errors.append(
                     "headline and body text regions must not overlap"
@@ -383,7 +469,7 @@ def _text_region_errors(
         return ["text region must be an object"]
     errors = []
     box = region.get("box")
-    if (
+    box_is_valid = not (
         not isinstance(box, list)
         or len(box) != 4
         or any(type(value) is not int for value in box)
@@ -391,8 +477,17 @@ def _text_region_errors(
             0 <= box[0] < box[2] <= CANVAS[0]
             and 0 <= box[1] < box[3] <= CANVAS[1]
         )
-    ):
+    )
+    if not box_is_valid:
         errors.append("text region must stay inside the canvas")
+    else:
+        if not (
+            TEXT_SAFE[0] <= box[0] < box[2] <= TEXT_SAFE[2]
+            and TEXT_SAFE[1] <= box[1] < box[3] <= TEXT_SAFE[3]
+        ):
+            errors.append("text region must stay inside safe margins")
+        if _boxes_overlap(box, list(NUMBER_PILL)):
+            errors.append("text region must not overlap the slide number")
     font_size = region.get("font_size")
     if (
         type(font_size) is not int
@@ -401,11 +496,24 @@ def _text_region_errors(
         errors.append("text font size is invalid")
     if region.get("align") not in {"left", "center", "right"}:
         errors.append("text alignment is invalid")
-    if not (
-        isinstance(region.get("color"), str)
-        and re.fullmatch(r"#[0-9A-Fa-f]{6}", region["color"])
-    ):
+    color = region.get("color")
+    background = region.get("background")
+    color_is_valid = isinstance(color, str) and bool(
+        re.fullmatch(r"#[0-9A-Fa-f]{6}", color)
+    )
+    background_is_valid = isinstance(background, str) and bool(
+        re.fullmatch(r"#[0-9A-Fa-f]{6}", background)
+    )
+    if not color_is_valid:
         errors.append("text color must be #RRGGBB")
+    if not background_is_valid:
+        errors.append("text background must be #RRGGBB")
+    if (
+        color_is_valid
+        and background_is_valid
+        and _contrast_ratio(color, background) < 4.5
+    ):
+        errors.append("text color must contrast with background")
     rotation = region.get("rotation")
     if type(rotation) is not int or not -12 <= rotation <= 12:
         errors.append("text rotation must be between -12 and 12")
@@ -421,16 +529,79 @@ def _boxes_overlap(first: list[int], second: list[int]) -> bool:
     )
 
 
+def _composed_text_box(region: dict) -> list[int]:
+    box = region["box"]
+    rotation = region.get("rotation")
+    if type(rotation) is not int or rotation == 0:
+        return box
+    width = box[2] - box[0]
+    height = box[3] - box[1]
+    radians = math.radians(rotation)
+    composed_width = (
+        abs(width * math.cos(radians))
+        + abs(height * math.sin(radians))
+    )
+    composed_height = (
+        abs(width * math.sin(radians))
+        + abs(height * math.cos(radians))
+    )
+    center_x = (box[0] + box[2]) / 2
+    center_y = (box[1] + box[3]) / 2
+    return [
+        math.floor(center_x - composed_width / 2),
+        math.floor(center_y - composed_height / 2),
+        math.ceil(center_x + composed_width / 2),
+        math.ceil(center_y + composed_height / 2),
+    ]
+
+
+def _contrast_ratio(first: str, second: str) -> float:
+    def luminance(color: str) -> float:
+        channels = []
+        for value in ImageColor.getrgb(color):
+            value /= 255
+            channels.append(
+                value / 12.92
+                if value <= 0.04045
+                else ((value + 0.055) / 1.055) ** 2.4
+            )
+        return (
+            0.2126 * channels[0]
+            + 0.7152 * channels[1]
+            + 0.0722 * channels[2]
+        )
+
+    lighter, darker = sorted(
+        (luminance(first), luminance(second)),
+        reverse=True,
+    )
+    return (lighter + 0.05) / (darker + 0.05)
+
+
 def validate_illustrations(draft: dict, draft_dir: Path) -> list[str]:
     errors = []
+    root = draft_dir.resolve()
     for slide in draft.get("slides", []):
         if not isinstance(slide, dict) or slide.get("kind") == "cta":
             continue
         illustration = slide.get("illustration")
         if _safe_illustration_path(illustration):
-            if not (draft_dir / illustration).is_file():
+            candidate = draft_dir / illustration
+            current = draft_dir
+            has_symlink = draft_dir.is_symlink()
+            for part in PurePosixPath(illustration).parts:
+                current /= part
+                has_symlink = has_symlink or current.is_symlink()
+            if (
+                has_symlink
+                or not candidate.resolve().is_relative_to(root)
+            ):
+                errors.append(
+                    "illustration paths must stay inside the draft directory"
+                )
+            elif not candidate.is_file():
                 errors.append(f"missing illustration: {illustration}")
-    return errors
+    return list(dict.fromkeys(errors))
 
 
 def _font(size: int, bold: bool = False):
@@ -524,6 +695,11 @@ def _draw_text_region(
 
     layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(layer)
+    draw.rounded_rectangle(
+        (0, 0, width - 1, height - 1),
+        radius=min(24, width // 4, height // 4),
+        fill=region["background"],
+    )
     y = 0
     for line in lines:
         box = draw.textbbox((0, 0), line, font=font)
@@ -546,12 +722,21 @@ def _draw_text_region(
         paste_x = x1 + (width - layer.width) // 2
         paste_y = y1 + (height - layer.height) // 2
         if (
-            paste_x < 0
-            or paste_y < 0
-            or paste_x + layer.width > CANVAS[0]
-            or paste_y + layer.height > CANVAS[1]
+            paste_x < TEXT_SAFE[0]
+            or paste_y < TEXT_SAFE[1]
+            or paste_x + layer.width > TEXT_SAFE[2]
+            or paste_y + layer.height > TEXT_SAFE[3]
+            or _boxes_overlap(
+                [
+                    paste_x,
+                    paste_y,
+                    paste_x + layer.width,
+                    paste_y + layer.height,
+                ],
+                list(NUMBER_PILL),
+            )
         ):
-            raise ValueError("rotated text leaves the canvas")
+            raise ValueError("rotated text leaves the safe area")
     else:
         paste_x, paste_y = x1, y1
     canvas.paste(layer, (paste_x, paste_y), layer)
@@ -567,7 +752,6 @@ def _resized_asset(path: Path, width: int) -> Image.Image:
 def _render_content(
     canvas: Image.Image,
     slide: dict,
-    project: dict,
     work_dir: Path,
 ) -> None:
     _place_full_bleed(canvas, work_dir / slide["illustration"])
@@ -650,18 +834,13 @@ def render_slide(
     if slide["kind"] == "cta":
         _render_cta(canvas, slide, project)
     else:
-        _render_content(canvas, slide, project, work_dir)
+        _render_content(canvas, slide, work_dir)
 
     draw = ImageDraw.Draw(canvas)
     number_font = _font(34, bold=True)
     number = f"{index}/{total}"
     number_box = draw.textbbox((0, 0), number, font=number_font)
-    pill = (
-        CANVAS[0] - 126,
-        CANVAS[1] - 84,
-        CANVAS[0] - 28,
-        CANVAS[1] - 28,
-    )
+    pill = NUMBER_PILL
     draw.rounded_rectangle(pill, radius=28, fill="#171512")
     draw.text(
         (
@@ -715,7 +894,7 @@ def _project(config: dict, project_id: str) -> dict:
 def validate_file(
     draft_path: Path,
     config_path: Path = CONFIG_PATH,
-    history_path: Path = HISTORY_PATH,
+    history_path: Path = PUBLIC_HISTORY_PATH,
 ) -> list[str]:
     config = load_json(config_path)
     draft = load_json(draft_path)
@@ -737,7 +916,7 @@ def validate_file(
 def validate_content_file(
     draft_path: Path,
     config_path: Path = CONFIG_PATH,
-    history_path: Path = HISTORY_PATH,
+    history_path: Path = PUBLIC_HISTORY_PATH,
 ) -> list[str]:
     config = load_json(config_path)
     draft = load_json(draft_path)
@@ -760,21 +939,58 @@ def render_file(
     output_dir: Path,
     config_path: Path = CONFIG_PATH,
     history_path: Path = HISTORY_PATH,
+    publication_history_path: Path = PUBLIC_HISTORY_PATH,
+) -> list[Path]:
+    draft = load_json(draft_path)
+    with draft_lock(history_path, draft["draft_id"]):
+        return _render_file_locked(
+            draft_path,
+            output_dir,
+            config_path,
+            history_path,
+            publication_history_path,
+        )
+
+
+def _render_file_locked(
+    draft_path: Path,
+    output_dir: Path,
+    config_path: Path,
+    history_path: Path,
+    publication_history_path: Path,
 ) -> list[Path]:
     config = load_json(config_path)
     draft = load_json(draft_path)
     project = _project(config, draft.get("project_id", ""))
-    errors = validate_file(draft_path, config_path, history_path)
+    errors = validate_file(
+        draft_path,
+        config_path,
+        publication_history_path,
+    )
     if errors:
         raise ValueError("\n".join(errors))
     events = read_events(history_path)
     latest = latest_event(draft["draft_id"], events)
-    if latest is None or latest.get("event") != "rendered":
-        assert_renderable(draft["draft_id"], events)
-    _assert_approved_content(
+    state = latest.get("event") if latest else None
+    if state == "rendered":
+        existing = [
+            output_dir / f"{index:02}.jpg"
+            for index in range(1, len(draft["slides"]) + 1)
+        ]
+        if (
+            latest.get("draft_fingerprint") != draft_fingerprint(draft)
+            or not all(path.is_file() for path in existing)
+            or latest.get("rendered_files") != rendered_manifest(existing)
+        ):
+            raise RuntimeError("image revision required before rerendering")
+        return existing
+    if state == "approved":
+        raise RuntimeError("image revision required before rerendering")
+    assert_renderable(draft["draft_id"], events)
+    assert_approved_content(
         draft["draft_id"],
         events,
-        _content_fingerprint(draft),
+        content_fingerprint(draft),
     )
     outputs = render_draft(
         draft,
@@ -782,7 +998,7 @@ def render_file(
         draft_path.parent,
         output_dir,
     )
-    mark_rendered(draft, history_path)
+    _mark_rendered_locked(draft, outputs, history_path)
     return outputs
 
 
@@ -800,37 +1016,37 @@ def main() -> int:
     render_parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
 
-    if args.command in {"record-content", "approve-content"}:
-        errors = validate_content_file(args.draft)
-        if errors:
-            for error in errors:
-                print(error)
-            return 2
-        draft = load_json(args.draft)
-        state = (
-            "content_drafted"
-            if args.command == "record-content"
-            else "content_approved"
-        )
-        record_content_state(draft, state, HISTORY_PATH)
-        print(f"recorded {state} for {draft['draft_id']}")
-        return 0
-    if args.command == "validate":
-        errors = validate_file(args.draft)
-        if errors:
-            for error in errors:
-                print(error)
-            return 2
-        print("draft valid")
-        return 0
-    if args.command == "render":
-        try:
+    try:
+        if args.command in {"record-content", "approve-content"}:
+            errors = validate_content_file(args.draft)
+            if errors:
+                for error in errors:
+                    print(error)
+                return 2
+            draft = load_json(args.draft)
+            state = (
+                "content_drafted"
+                if args.command == "record-content"
+                else "content_approved"
+            )
+            record_content_state(draft, state, HISTORY_PATH)
+            print(f"recorded {state} for {draft['draft_id']}")
+            return 0
+        if args.command == "validate":
+            errors = validate_file(args.draft)
+            if errors:
+                for error in errors:
+                    print(error)
+                return 2
+            print("draft valid")
+            return 0
+        if args.command == "render":
             outputs = render_file(args.draft, args.output)
-        except ValueError as error:
-            print(error)
-            return 2
-        print(f"rendered {len(outputs)} slides to {args.output}")
-        return 0
+            print(f"rendered {len(outputs)} slides to {args.output}")
+            return 0
+    except (OSError, RuntimeError, ValueError) as error:
+        print(error)
+        return 2
     return 2
 
 

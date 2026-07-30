@@ -1,5 +1,11 @@
 # Instagram Promotion Automation Implementation Plan
 
+**Status: Superseded.** The content-first plan
+`2026-07-29-content-first-art-direction.md` and `social/README.md` govern the
+current two-approval workflow, fixed public configuration, repository-root
+`.env`, local runtime ledger, and release checks. Environment, history, and
+configuration instructions below are retained only as implementation history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Generate one English Instagram carousel draft at 8:00 AM America/Vancouver, present it in this Codex task for approval, and publish it immediately after `승인` using private R2 staging that is always cleaned up.
