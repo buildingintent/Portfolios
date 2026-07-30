@@ -243,10 +243,7 @@ async function sendPrivateReply(commentId, reply, env, fetcher) {
 }
 
 async function handleComment(change, env, fetcher) {
-  if (
-    change.field !== "comments" ||
-    change.accountId !== env.INSTAGRAM_USER_ID
-  ) {
+  if (change.field !== "comments") {
     return
   }
   const value = change.value

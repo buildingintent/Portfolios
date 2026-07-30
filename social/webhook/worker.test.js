@@ -95,6 +95,7 @@ function environment() {
 }
 
 function commentPayload({
+  accountId = "17841425833103994",
   mediaId = MEDIA_ID,
   commentId = COMMENT_ID,
   text = "  forecast! ",
@@ -104,7 +105,7 @@ function commentPayload({
     object: "instagram",
     entry: [
       {
-        id: "17841425833103994",
+        id: accountId,
         time: 1785400000000,
         changes: [
           {
@@ -303,6 +304,25 @@ test("sends the registered reply for any non self comment text", async () => {
     },
   })
   assert.equal(env.DB.deliveries.get(COMMENT_ID).status, "sent")
+})
+
+test("accepts a signed webhook account ID from another namespace", async () => {
+  const env = environment()
+  await registerRule(env)
+  let sends = 0
+  const fetcher = async () => {
+    sends += 1
+    return Response.json({ message_id: "message-1" })
+  }
+
+  const response = await handleRequest(
+    signedWebhook(commentPayload({ accountId: "99999999999999999" })),
+    env,
+    fetcher,
+  )
+
+  assert.equal(response.status, 200)
+  assert.equal(sends, 1)
 })
 
 test("accepts Meta direct field comment payloads", async () => {
