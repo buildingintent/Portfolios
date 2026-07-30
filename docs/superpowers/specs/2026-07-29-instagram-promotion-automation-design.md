@@ -178,6 +178,32 @@ engine.
 
 ## Visual System
 
+### Fixed identity and project accents
+
+Every post shares one recognizable visual world:
+
+- Fixed warm ivory `#FBF2E8` background with subtle matte paper texture.
+- Fixed rounded, hand-lettered black typography matching the approved
+  typography reference.
+- Fixed recurring family: powder-blue dad, muted-coral mom, dusty-pink
+  daughter, and pale-sky-blue son, with the same rounded proportions,
+  two ear bumps, simple faces, outlines, and relative sizes.
+- Fixed simple editorial treatment: slightly imperfect black ink, matte
+  pastel fills, restrained detail, and generous negative space.
+
+The story determines which family member narrates or appears; multiple family
+members may appear together. Projects do not receive separate mascots.
+
+Only the theme accent varies. It comes from the project's configured
+`palette.accent` and may highlight a few words or meaningful props. Say Better
+uses coral and Fina uses sage. The accent never changes the fixed background
+or recolors the family.
+
+Canonical references live at:
+
+- `social/assets/style/family-reference.png`
+- `social/assets/style/typography-reference.png`
+
 ### Generated illustration
 
 The Codex image model produces a new art-directed scene for every non-CTA
@@ -222,8 +248,8 @@ Pillow composes all exact elements from the per-slide scene plan:
 
 Brand palettes start from the approved logos:
 
-- Fina: warm off-white, sage, and charcoal.
-- Say Better: warm off-white, orange-red, and charcoal.
+- Fina: fixed warm ivory, sage theme accent, and charcoal.
+- Say Better: fixed warm ivory, coral theme accent, and charcoal.
 
 The final CTA slide contains no app screenshot. It uses the approved app logo,
 app name, official App Store badge, and one positioning sentence.

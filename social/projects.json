@@ -42,7 +42,7 @@
         "A short reply does not give the recipient enough context"
       ],
       "palette": {
-        "background": "#F7F3EC",
+        "background": "#FBF2E8",
         "accent": "#F05A3F",
         "ink": "#24211F"
       }
@@ -67,7 +67,7 @@
         "Saving goals compete with bills without a forward-looking view"
       ],
       "palette": {
-        "background": "#F5F1E8",
+        "background": "#FBF2E8",
         "accent": "#7A8F72",
         "ink": "#242621"
       },

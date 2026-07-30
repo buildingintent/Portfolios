@@ -33,7 +33,8 @@ and `short-action-plan`.
 - The CTA contains the configured logo, app name, one positioning sentence,
   and the official App Store badge—never an app screenshot.
 - The caption accurately summarizes the slides, includes `link in bio`, and
-  contains the project's exact App Store URL.
+  contains the project's exact App Store URL. End with 5–8 specific,
+  relevant English hashtags; avoid generic reach-bait tags.
 - Write a meaningful plan for every slide. For Fina, do not promise outcomes
   or present education as personalized financial, investment, tax, legal, or
   credit advice.
@@ -79,6 +80,31 @@ After exact `콘텐츠 승인`, run:
 ```bash
 .venv/bin/python social/render.py approve-content .social-work/<draft-id>/draft.json
 ```
+
+### Fixed visual identity
+
+Keep these elements consistent across every app and every post:
+
+- Use the same warm ivory background, `#FBF2E8`, with only a very subtle
+  matte paper texture. Do not switch to pure white or an app-specific
+  background.
+- Match the rounded, hand-lettered typography in
+  `social/assets/style/typography-reference.png`. Keep its friendly black-ink
+  stroke, spacing, and hierarchy; reject typography that feels digital,
+  corporate, or visibly AI-generated.
+- Reuse the same fictional family shown in
+  `social/assets/style/family-reference.png`: powder-blue dad, muted-coral
+  mom, dusty-pink daughter, and pale-sky-blue son. Preserve their rounded
+  proportions, two ear bumps, simple faces, black outlines, and relative
+  sizes. Cast one or more family members according to the story instead of
+  inventing app-specific mascots.
+- Keep the illustration language simple: slightly imperfect black ink,
+  matte pastel fills, restrained detail, and generous negative space.
+
+Only the theme accent changes by project. Read `palette.accent` from
+`social/projects.json` and use it sparingly for highlighted words and
+meaningful props. Say Better uses coral; Fina uses sage. The app accent must
+never recolor the family or replace the fixed background.
 
 Create a fresh art direction for this carousel and a different,
 content-specific scene plan for each non-CTA slide. Read recent `rendered`
