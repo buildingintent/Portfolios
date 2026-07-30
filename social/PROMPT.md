@@ -42,9 +42,12 @@ and `short-action-plan`.
   one outcome-specific comment keyword, and the official App Store badge.
   Never use an app screenshot.
 - The CTA and caption promise one specific piece of useful help and ask for
-  the same keyword. Do not put the raw App Store URL in the caption or mention
-  a bio or profile link. End with 5–8 specific, relevant English hashtags;
-  avoid generic reach-bait tags.
+  the same keyword. The final prose line of the caption, immediately before
+  the hashtags, must follow this pattern: `Comment KEYWORD and I will send you
+  SPECIFIC USEFUL ITEM, along with a link to APP NAME.` Adapt the useful item
+  to the post. Do not put the raw App Store URL in the caption or mention a
+  bio or profile link. Put 5–8 specific, relevant English hashtags on the
+  final line and avoid generic reach-bait tags.
 - The keyword tells people what to comment, but the Worker sends the approved
   reply for any non-self comment on that registered post.
 - Add `comment_rule` with the approved uppercase `keyword`, the public
@@ -66,7 +69,7 @@ each slide has only `kind`, `headline`, and `body`; omit `illustration`,
   "project_id": "fina",
   "format_id": "what-happens-next",
   "hook": "Your balance looks fine. Next Tuesday might not.",
-  "caption": "A balance is a snapshot. Want a simple way to look ahead? Comment FORECAST and we will send it. #cashflow #budgetplanning #moneyhabits #personalfinance #financialplanning",
+  "caption": "A balance is a snapshot. It does not show what is about to leave your account.\n\nComment FORECAST and I will send you a simple checklist, along with a link to Fina.\n\n#cashflow #budgetplanning #moneyhabits #personalfinance #financialplanning",
   "comment_rule": {
     "keyword": "FORECAST",
     "promise": "A simple checklist for looking ahead.",
